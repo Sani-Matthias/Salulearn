@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import LearnPage from './pages/LearnPage'
+import LessonPage from './pages/LessonPage'
 import ProfilePage from './pages/ProfilePage'
 import StreakCalendar from './components/StreakCalendar'
 import AuthModal from './components/AuthModal'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { syncProgress, loadLocalProgress, saveLocalProgress, type ProgressState } from './services/progressService'
+import { syncProgress, loadLocalProgress, saveLocalProgress, saveCloudProgress, calculateStreak, type ProgressState } from './services/progressService'
 
 // Confetti colors
 const CONFETTI_COLORS = ['#ff7ab5', '#5cd3ff', '#8fd867', '#9b7bff', '#f7b500', '#f97316']
@@ -28,11 +29,12 @@ export type { ProgressState } from './services/progressService'
 const today = new Date().toISOString().slice(0, 10)
 
 const defaultProgress: ProgressState = {
-  completion: 0.24,
-  points: 850,
-  streak: 3,
-  badges: ['Ersthelfer', 'Teamplayer'],
+  completion: 0,
+  points: 0,
+  streak: 0,
+  badges: [],
   hearts: 5,
+  lastActive: null,
 }
 
 const dailyMissions = [
@@ -49,8 +51,8 @@ function AppContent() {
   const [showConfetti, setShowConfetti] = useState(false)
   const [confettiPieces, setConfettiPieces] = useState<ReturnType<typeof generateConfetti>>([])
   const [toast, setToast] = useState<{ message: string; xp: number } | null>(null)
-  const [lastActive, setLastActive] = useState<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [streakUpdated, setStreakUpdated] = useState(false)
   const location = useLocation()
 
   // Load progress on mount
@@ -66,14 +68,37 @@ function AppContent() {
     saveLocalProgress(progress)
   }, [progress])
 
-  // Sync progress with cloud when user logs in
+  // Sync progress with cloud when user logs in and update streak
   useEffect(() => {
     const doSync = async () => {
-      if (user && isOnlineMode && !isSyncing) {
+      if (user && isOnlineMode && !isSyncing && !streakUpdated) {
         setIsSyncing(true)
         try {
-          const syncedProgress = await syncProgress(user.id, progress, lastActive || today)
-          setProgress(syncedProgress)
+          // First sync to get cloud data
+          const syncedProgress = await syncProgress(user.id, progress)
+
+          // Calculate streak based on lastActive
+          const { streak: newStreak, isNewDay } = calculateStreak(
+            syncedProgress.lastActive,
+            syncedProgress.streak
+          )
+
+          // Update progress with new streak and today's date
+          const updatedProgress: ProgressState = {
+            ...syncedProgress,
+            streak: newStreak,
+            lastActive: isNewDay ? today : syncedProgress.lastActive,
+          }
+
+          setProgress(updatedProgress)
+
+          // Save updated progress if it's a new day
+          if (isNewDay) {
+            await saveCloudProgress(user.id, updatedProgress)
+            saveLocalProgress(updatedProgress)
+          }
+
+          setStreakUpdated(true)
         } catch (error) {
           console.error('Sync error:', error)
         }
@@ -81,31 +106,14 @@ function AppContent() {
       }
     }
     doSync()
-  }, [user, isOnlineMode])
+  }, [user, isOnlineMode, streakUpdated])
 
-  // Handle streak logic
+  // Reset streakUpdated flag when user logs out
   useEffect(() => {
-    if (user && lastActive !== today) {
-      const lastDate = lastActive ? new Date(lastActive) : new Date()
-      const todayDate = new Date(today)
-      const diffTime = Math.abs(todayDate.getTime() - lastDate.getTime())
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-      if (diffDays === 1) {
-        setProgress((prev) => ({
-          ...prev,
-          streak: Math.min(99, prev.streak + 1),
-        }))
-      } else if (diffDays > 1) {
-        setProgress((prev) => ({
-          ...prev,
-          streak: 1,
-        }))
-      }
-
-      setLastActive(today)
+    if (!user) {
+      setStreakUpdated(false)
     }
-  }, [user, lastActive])
+  }, [user])
 
   const friendlyTitle = useMemo(() => {
     switch (location.pathname) {
@@ -152,10 +160,8 @@ function AppContent() {
 
   const handleAuthSuccess = () => {
     setShowLogin(false)
-    // Trigger sync after login
-    if (user && isOnlineMode) {
-      syncProgress(user.id, progress, today)
-    }
+    // Reset streakUpdated to trigger sync after login
+    setStreakUpdated(false)
   }
 
   const handleLogout = () => {
@@ -270,12 +276,21 @@ function AppContent() {
                 />
               }
             />
+            <Route
+              path="/lesson/:lessonId"
+              element={
+                <LessonPage
+                  onCompleteMission={handleCompleteMission}
+                  onWrongTry={handleWrongTry}
+                />
+              }
+            />
           </Routes>
         </div>
 
         <aside className="right-rail">
           <div className="card rail-card">
-            <StreakCalendar lastActive={lastActive} streak={progress.streak} />
+            <StreakCalendar lastActive={progress.lastActive} streak={progress.streak} />
           </div>
           <div className="card rail-card">
             <div className="rail-header">

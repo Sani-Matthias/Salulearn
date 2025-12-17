@@ -6,6 +6,7 @@ export type ProgressState = {
   streak: number
   badges: string[]
   hearts: number
+  lastActive: string | null
 }
 
 const STORAGE_KEY = 'salu-progress-v1'
@@ -36,6 +37,7 @@ export function getDefaultProgress(): ProgressState {
     streak: 0,
     badges: [],
     hearts: 5,
+    lastActive: null,
   }
 }
 
@@ -64,14 +66,14 @@ export async function loadCloudProgress(userId: string): Promise<ProgressState |
     streak: data.streak,
     badges: data.badges || [],
     hearts: data.hearts,
+    lastActive: data.last_active,
   }
 }
 
 // Save progress to Supabase
 export async function saveCloudProgress(
   userId: string,
-  progress: ProgressState,
-  lastActive: string
+  progress: ProgressState
 ): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured()) return false
 
@@ -84,7 +86,7 @@ export async function saveCloudProgress(
       streak: progress.streak,
       badges: progress.badges,
       hearts: progress.hearts,
-      last_active: lastActive,
+      last_active: progress.lastActive,
       updated_at: new Date().toISOString(),
     }, {
       onConflict: 'user_id',
@@ -101,8 +103,7 @@ export async function saveCloudProgress(
 // Sync local and cloud progress (cloud takes precedence if newer)
 export async function syncProgress(
   userId: string,
-  localProgress: ProgressState,
-  lastActive: string
+  localProgress: ProgressState
 ): Promise<ProgressState> {
   if (!isSupabaseConfigured()) {
     return localProgress
@@ -112,24 +113,58 @@ export async function syncProgress(
 
   if (!cloudProgress) {
     // No cloud progress, upload local
-    await saveCloudProgress(userId, localProgress, lastActive)
+    await saveCloudProgress(userId, localProgress)
     return localProgress
   }
 
   // Merge: take the better values (higher XP, streak, completion)
+  // Use cloud lastActive as source of truth for streak calculation
   const merged: ProgressState = {
     completion: Math.max(localProgress.completion, cloudProgress.completion),
     points: Math.max(localProgress.points, cloudProgress.points),
-    streak: Math.max(localProgress.streak, cloudProgress.streak),
+    streak: cloudProgress.streak, // Use cloud streak as source of truth
     hearts: cloudProgress.hearts, // Use cloud hearts (more recent state)
     badges: [...new Set([...localProgress.badges, ...cloudProgress.badges])],
+    lastActive: cloudProgress.lastActive, // Use cloud lastActive
   }
 
   // Save merged progress
-  await saveCloudProgress(userId, merged, lastActive)
+  await saveCloudProgress(userId, merged)
   saveLocalProgress(merged)
 
   return merged
+}
+
+// Update streak based on last active date
+export function calculateStreak(lastActive: string | null, currentStreak: number): { streak: number; isNewDay: boolean } {
+  const today = new Date().toISOString().slice(0, 10)
+
+  // First time user or no lastActive
+  if (!lastActive) {
+    return { streak: 1, isNewDay: true }
+  }
+
+  // Already visited today
+  if (lastActive === today) {
+    return { streak: currentStreak, isNewDay: false }
+  }
+
+  // Calculate days difference
+  const lastDate = new Date(lastActive)
+  const todayDate = new Date(today)
+  const diffTime = todayDate.getTime() - lastDate.getTime()
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 1) {
+    // Consecutive day - increment streak
+    return { streak: currentStreak + 1, isNewDay: true }
+  } else if (diffDays > 1) {
+    // Missed days - reset streak to 1
+    return { streak: 1, isNewDay: true }
+  }
+
+  // Same day (shouldn't happen but handle edge case)
+  return { streak: currentStreak, isNewDay: false }
 }
 
 // Check and unlock achievements

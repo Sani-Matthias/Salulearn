@@ -1,0 +1,4 @@
+// push in Github: git add . && git commit -m "your message" && git push
+//app verarbeiten: npm run build
+//app starten: npm start
+//app entwickeln: npm run dev
