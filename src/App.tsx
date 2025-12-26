@@ -26,7 +26,11 @@ const generateConfetti = () => {
 // Re-export ProgressState for backwards compatibility
 export type { ProgressState } from './services/progressService'
 
-const today = new Date().toISOString().slice(0, 10)
+// Get today's date in local timezone (YYYY-MM-DD)
+const getLocalToday = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
 
 const defaultProgress: ProgressState = {
   completion: 0,
@@ -34,7 +38,10 @@ const defaultProgress: ProgressState = {
   streak: 0,
   badges: [],
   hearts: 5,
+  coins: 0,
   lastActive: null,
+  completedLessons: [],
+  claimedMissions: [],
 }
 
 const dailyMissions = [
@@ -55,11 +62,28 @@ function AppContent() {
   const [streakUpdated, setStreakUpdated] = useState(false)
   const location = useLocation()
 
-  // Load progress on mount
+  // Load progress on mount and update streak for offline mode
   useEffect(() => {
     const localProgress = loadLocalProgress()
     if (localProgress) {
-      setProgress(localProgress)
+      // Calculate and update streak based on last active date
+      const { streak: newStreak, isNewDay } = calculateStreak(
+        localProgress.lastActive,
+        localProgress.streak
+      )
+
+      const updatedProgress: ProgressState = {
+        ...localProgress,
+        streak: newStreak,
+        lastActive: isNewDay ? getLocalToday() : localProgress.lastActive,
+      }
+
+      setProgress(updatedProgress)
+
+      // Save updated progress if it's a new day
+      if (isNewDay) {
+        saveLocalProgress(updatedProgress)
+      }
     }
   }, [])
 
@@ -87,7 +111,7 @@ function AppContent() {
           const updatedProgress: ProgressState = {
             ...syncedProgress,
             streak: newStreak,
-            lastActive: isNewDay ? today : syncedProgress.lastActive,
+            lastActive: isNewDay ? getLocalToday() : syncedProgress.lastActive,
           }
 
           setProgress(updatedProgress)
@@ -137,8 +161,13 @@ function AppContent() {
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  const handleCompleteMission = useCallback((rewardPoints = 60, completionBoost = 0.03) => {
+  const handleCompleteMission = useCallback((rewardPoints = 60, completionBoost = 0.03, coinReward = 10, missionId?: string) => {
     setProgress((prev) => {
+      // Check if mission was already claimed
+      if (missionId && prev.claimedMissions.includes(missionId)) {
+        return prev
+      }
+
       const nextCompletion = Math.min(1, prev.completion + completionBoost)
       const nextHearts = Math.min(5, prev.hearts + 1)
       return {
@@ -146,6 +175,8 @@ function AppContent() {
         completion: nextCompletion,
         points: prev.points + rewardPoints,
         hearts: nextHearts,
+        coins: prev.coins + coinReward,
+        claimedMissions: missionId ? [...prev.claimedMissions, missionId] : prev.claimedMissions,
       }
     })
     triggerCelebration(rewardPoints)
@@ -175,7 +206,7 @@ function AppContent() {
       <div className="app-frame">
         <aside className="sidebar">
           <Link to="/" className="brand">
-            <span className="brand-mark">S</span>
+            <img src="/logo.png" alt="SaluLearn" className="brand-logo" />
             <div>
               <p className="brand-name">SaluLearn</p>
               <p className="eyebrow">Erste Hilfe</p>
@@ -219,15 +250,23 @@ function AppContent() {
               <span className="stat-icon">⭐</span>
               <span className="stat-value-text">{progress.points} XP</span>
             </div>
+            <div className="stat-chip pflaster">
+              <span className="stat-icon">🩹</span>
+              <span className="stat-value-text">{progress.coins}</span>
+            </div>
             <div className="stat-chip course">
               <span className="stat-icon">📚</span>
               <span className="stat-value-text">{Math.round(progress.completion * 100)}%</span>
             </div>
             {user ? (
               <Link to="/profile" className="stat-chip user-chip">
-                <span className="user-avatar-mini">
-                  {profile?.display_name?.slice(0, 1).toUpperCase() || user.email?.slice(0, 1).toUpperCase() || 'U'}
-                </span>
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="" className="user-avatar-mini-img" />
+                ) : (
+                  <span className="user-avatar-mini">
+                    {profile?.display_name?.slice(0, 1).toUpperCase() || user.email?.slice(0, 1).toUpperCase() || 'U'}
+                  </span>
+                )}
                 <span>{profile?.display_name || user.email?.split('@')[0] || 'User'}</span>
                 {isSyncing && <span className="sync-indicator">↻</span>}
               </Link>
@@ -365,6 +404,22 @@ function AppContent() {
           <span className="xp-reward">+{toast.xp} XP</span>
         </div>
       )}
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-nav">
+        <NavLink className="mobile-nav-item" to="/">
+          <span className="mobile-nav-icon">🏠</span>
+          <span>Lernen</span>
+        </NavLink>
+        <NavLink className="mobile-nav-item" to="/learn">
+          <span className="mobile-nav-icon">🎯</span>
+          <span>Missionen</span>
+        </NavLink>
+        <NavLink className="mobile-nav-item" to="/profile">
+          <span className="mobile-nav-icon">👤</span>
+          <span>Profil</span>
+        </NavLink>
+      </nav>
     </div>
   )
 }

@@ -15,7 +15,7 @@ const pathNodes = [
   { id: 'allergie', label: 'Allergie', status: 'locked', icon: '💊', xp: 75, color: '#ff7ab5' },
 ]
 
-function HomePage({ progress }: HomePageProps) {
+function HomePage({ progress: _progress }: HomePageProps) {
   return (
     <div className="home-layout">
       <div className="learning-path">

@@ -15,6 +15,7 @@ type AuthContextType = {
   resetPassword: (email: string) => Promise<{ error: string | null }>
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: string | null }>
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -242,6 +243,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null }
   }
 
+  // Refresh profile data
+  const refreshProfile = async () => {
+    if (user) {
+      const updatedProfile = await fetchProfile(user.id)
+      setProfile(updatedProfile)
+    }
+  }
+
   const value = {
     user,
     profile,
@@ -255,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetPassword,
     updateProfile,
     updatePassword,
+    refreshProfile,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

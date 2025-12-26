@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { ACHIEVEMENTS } from '../lib/supabase'
 import {
@@ -7,7 +7,7 @@ import {
   getLeague,
   type ProgressState,
 } from '../services/progressService'
-import ProgressRing from '../components/ProgressRing'
+import { uploadAvatar, deleteAvatar } from '../services/avatarService'
 
 type ProfilePageProps = {
   progress: ProgressState
@@ -15,7 +15,7 @@ type ProfilePageProps = {
 }
 
 export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
-  const { user, profile, updateProfile, updatePassword, signOut, isOnlineMode } = useAuth()
+  const { user, profile, updateProfile, updatePassword, signOut, isOnlineMode, refreshProfile } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name || '')
   const [newPassword, setNewPassword] = useState('')
@@ -25,6 +25,8 @@ export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [achievements, setAchievements] = useState<string[]>([])
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const levelInfo = calculateLevel(progress.points)
   const league = getLeague(progress.points)
@@ -95,6 +97,72 @@ export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
     return name.slice(0, 2).toUpperCase()
   }
 
+  // Handle avatar upload
+  const handleAvatarClick = () => {
+    if (isOnlineMode && !avatarUploading) {
+      fileInputRef.current?.click()
+    }
+  }
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+
+    console.log('Starting avatar change, file:', file.name, file.size, file.type)
+    setAvatarUploading(true)
+    setError(null)
+
+    try {
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Upload Timeout - bitte versuche es erneut')), 30000)
+      )
+
+      const result = await Promise.race([
+        uploadAvatar(user.id, file),
+        timeoutPromise
+      ])
+
+      if (result.error) {
+        console.error('Upload result error:', result.error)
+        setError(result.error)
+      } else {
+        console.log('Upload successful, refreshing profile')
+        setSuccess('Avatar aktualisiert!')
+        await refreshProfile()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      console.error('Avatar upload error:', err)
+      setError(err instanceof Error ? err.message : 'Fehler beim Hochladen')
+    } finally {
+      setAvatarUploading(false)
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleDeleteAvatar = async () => {
+    if (!user || !profile?.avatar_url) return
+
+    setAvatarUploading(true)
+    setError(null)
+
+    const result = await deleteAvatar(user.id, profile.avatar_url)
+
+    if (result.error) {
+      setError(result.error)
+    } else {
+      setSuccess('Avatar entfernt!')
+      await refreshProfile()
+      setTimeout(() => setSuccess(null), 3000)
+    }
+
+    setAvatarUploading(false)
+  }
+
   const allAchievements = Object.values(ACHIEVEMENTS)
 
   return (
@@ -104,13 +172,42 @@ export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
         <section className="card profile-header-card">
           <div className="profile-header">
             <div className="profile-avatar-section">
-              <div className="profile-avatar large">
+              <div
+                className={`profile-avatar large ${isOnlineMode ? 'clickable' : ''} ${avatarUploading ? 'uploading' : ''}`}
+                onClick={handleAvatarClick}
+                title={isOnlineMode ? 'Klicke um Avatar zu aendern' : ''}
+              >
                 {profile?.avatar_url ? (
                   <img src={profile.avatar_url} alt="Avatar" />
                 ) : (
                   <span>{getInitials()}</span>
                 )}
+                {isOnlineMode && (
+                  <div className="avatar-overlay">
+                    {avatarUploading ? (
+                      <span className="avatar-spinner" />
+                    ) : (
+                      <span className="avatar-edit-icon">📷</span>
+                    )}
+                  </div>
+                )}
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={handleAvatarChange}
+                style={{ display: 'none' }}
+              />
+              {isOnlineMode && profile?.avatar_url && (
+                <button
+                  className="cta tiny ghost avatar-delete-btn"
+                  onClick={handleDeleteAvatar}
+                  disabled={avatarUploading}
+                >
+                  Avatar entfernen
+                </button>
+              )}
               <div className={`league-badge ${league.color}`}>
                 <span className="league-icon">{league.icon}</span>
                 <span>{league.name}</span>
@@ -239,16 +336,6 @@ export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
                 </div>
               )
             })}
-          </div>
-        </section>
-      </div>
-
-      <div className="profile-side">
-        {/* Progress Ring Card */}
-        <section className="card">
-          <h3>Kursfortschritt</h3>
-          <div className="profile-progress-section">
-            <ProgressRing progress={progress.completion} label="Abgeschlossen" size={160} />
           </div>
         </section>
 

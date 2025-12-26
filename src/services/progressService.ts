@@ -6,7 +6,10 @@ export type ProgressState = {
   streak: number
   badges: string[]
   hearts: number
+  coins: number
   lastActive: string | null
+  completedLessons: string[]
+  claimedMissions: string[]
 }
 
 const STORAGE_KEY = 'salu-progress-v1'
@@ -37,7 +40,10 @@ export function getDefaultProgress(): ProgressState {
     streak: 0,
     badges: [],
     hearts: 5,
+    coins: 0,
     lastActive: null,
+    completedLessons: [],
+    claimedMissions: [],
   }
 }
 
@@ -66,7 +72,10 @@ export async function loadCloudProgress(userId: string): Promise<ProgressState |
     streak: data.streak,
     badges: data.badges || [],
     hearts: data.hearts,
+    coins: data.coins || 0,
     lastActive: data.last_active,
+    completedLessons: data.completed_lessons || [],
+    claimedMissions: data.claimed_missions || [],
   }
 }
 
@@ -86,7 +95,10 @@ export async function saveCloudProgress(
       streak: progress.streak,
       badges: progress.badges,
       hearts: progress.hearts,
+      coins: progress.coins,
       last_active: progress.lastActive,
+      completed_lessons: progress.completedLessons,
+      claimed_missions: progress.claimedMissions,
       updated_at: new Date().toISOString(),
     }, {
       onConflict: 'user_id',
@@ -124,8 +136,11 @@ export async function syncProgress(
     points: Math.max(localProgress.points, cloudProgress.points),
     streak: cloudProgress.streak, // Use cloud streak as source of truth
     hearts: cloudProgress.hearts, // Use cloud hearts (more recent state)
+    coins: Math.max(localProgress.coins || 0, cloudProgress.coins || 0),
     badges: [...new Set([...localProgress.badges, ...cloudProgress.badges])],
     lastActive: cloudProgress.lastActive, // Use cloud lastActive
+    completedLessons: [...new Set([...(localProgress.completedLessons || []), ...(cloudProgress.completedLessons || [])])],
+    claimedMissions: [...new Set([...(localProgress.claimedMissions || []), ...(cloudProgress.claimedMissions || [])])],
   }
 
   // Save merged progress
@@ -135,9 +150,21 @@ export async function syncProgress(
   return merged
 }
 
+// Get today's date in local timezone (YYYY-MM-DD)
+function getLocalToday(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+// Parse date string (YYYY-MM-DD) as local date at midnight
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day, 0, 0, 0, 0)
+}
+
 // Update streak based on last active date
 export function calculateStreak(lastActive: string | null, currentStreak: number): { streak: number; isNewDay: boolean } {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getLocalToday()
 
   // First time user or no lastActive
   if (!lastActive) {
@@ -149,11 +176,11 @@ export function calculateStreak(lastActive: string | null, currentStreak: number
     return { streak: currentStreak, isNewDay: false }
   }
 
-  // Calculate days difference
-  const lastDate = new Date(lastActive)
-  const todayDate = new Date(today)
+  // Calculate days difference using local dates
+  const lastDate = parseLocalDate(lastActive)
+  const todayDate = parseLocalDate(today)
   const diffTime = todayDate.getTime() - lastDate.getTime()
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
 
   if (diffDays === 1) {
     // Consecutive day - increment streak
@@ -161,6 +188,9 @@ export function calculateStreak(lastActive: string | null, currentStreak: number
   } else if (diffDays > 1) {
     // Missed days - reset streak to 1
     return { streak: 1, isNewDay: true }
+  } else if (diffDays < 0) {
+    // Future date (clock changed?) - keep current state
+    return { streak: currentStreak, isNewDay: false }
   }
 
   // Same day (shouldn't happen but handle edge case)
