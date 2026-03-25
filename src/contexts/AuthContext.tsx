@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Supabase nicht konfiguriert. Bitte .env Datei pruefen.' }
     }
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {

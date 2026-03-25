@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, NavLink, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, NavLink, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import type { ProgressState } from './services/progressService';
 import {
