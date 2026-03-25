@@ -10,7 +10,7 @@ type AuthModalProps = {
 type AuthMode = 'login' | 'register' | 'forgot'
 
 export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
-  const { signIn, signUp, signInWithGoogle, resetPassword, isOnlineMode } = useAuth()
+  const { signIn, signUp, signInWithGoogle, resetPassword, isOnlineMode, resendConfirmationEmail } = useAuth()
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,6 +19,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showResendForEmail, setShowResendForEmail] = useState<string | null>(null)
 
   if (!isOpen) return null
 
@@ -27,12 +28,16 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
     setError(null)
     setSuccess(null)
     setLoading(true)
+    setShowResendForEmail(null)
 
     try {
       if (mode === 'login') {
         const result = await signIn(email, password)
         if (result.error) {
           setError(result.error)
+          if (result.error.includes('E-Mail noch nicht bestaetigt')) {
+            setShowResendForEmail(email)
+          }
         } else {
           onSuccess?.()
           onClose()
@@ -58,8 +63,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
         if (result.error) {
           setError(result.error)
         } else {
-          setSuccess('Konto erstellt! Du kannst dich jetzt anmelden.')
-          setMode('login')
+          setSuccess('Konto erstellt! Bitte bestaetige deine E-Mail-Adresse. Schau in dein Postfach (und im Spam-Ordner).')
+          setShowResendForEmail(email)
           setPassword('')
           setConfirmPassword('')
         }
@@ -88,10 +93,29 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
     setLoading(false)
   }
 
+  const handleResend = async () => {
+    if (!showResendForEmail) return
+
+    setError(null)
+    setSuccess(null)
+    setLoading(true)
+
+    const result = await resendConfirmationEmail(showResendForEmail)
+
+    if (result.error) {
+      setError(result.error)
+    } else {
+      setSuccess('Bestaetigungs-E-Mail wurde erneut gesendet.')
+    }
+
+    setLoading(false)
+  }
+
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode)
     setError(null)
     setSuccess(null)
+    setShowResendForEmail(null)
   }
 
   const getPasswordStrength = (pwd: string): { strength: number; label: string; color: string } => {
@@ -135,6 +159,11 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
           <div className="auth-error">
             <span>❌</span>
             <span>{error}</span>
+            {showResendForEmail && (
+              <button onClick={handleResend} className="text-link" disabled={loading}>
+                {loading ? 'Senden...' : 'Bestaetigungs-E-Mail erneut senden'}
+              </button>
+            )}
           </div>
         )}
 
@@ -142,6 +171,11 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
           <div className="auth-success">
             <span>✅</span>
             <span>{success}</span>
+            {showResendForEmail && mode === 'register' && (
+              <button onClick={handleResend} className="text-link" disabled={loading}>
+                {loading ? 'Senden...' : 'Nicht erhalten? Erneut senden.'}
+              </button>
+            )}
           </div>
         )}
 
@@ -313,3 +347,4 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
     </div>
   )
 }
+

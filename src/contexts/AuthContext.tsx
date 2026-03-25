@@ -16,6 +16,7 @@ type AuthContextType = {
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: string | null }>
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>
   refreshProfile: () => Promise<void>
+  resendConfirmationEmail: (email: string) => Promise<{ error: string | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -77,26 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-
-      if (session?.user) {
-        let userProfile = await fetchProfile(session.user.id)
-        if (!userProfile) {
-          userProfile = await createProfile(session.user)
-        }
-        setProfile(userProfile)
-      }
-
-      setLoading(false)
-    })
-
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
+      setLoading(true)
+
 
       if (session?.user) {
         let userProfile = await fetchProfile(session.user.id)
@@ -107,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setProfile(null)
       }
+      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
@@ -130,11 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       return { error: translateError(error.message) }
-    }
-
-    // Create profile immediately after signup
-    if (data.user) {
-      await createProfile(data.user, displayName)
     }
 
     return { error: null }
@@ -163,15 +146,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) {
       return { error: 'Supabase nicht konfiguriert. Bitte .env Datei pruefen.' }
     }
-
+    console.log("Attempting Google Sign in")
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      provider: 'google'
     })
 
     if (error) {
+      console.error("Google Sign in Error:", error)
       return { error: translateError(error.message) }
     }
 
@@ -203,6 +184,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return { error: null }
   }
+  
+  // Resend confirmation email
+  const resendConfirmationEmail = async (email: string) => {
+    if (!supabase) {
+      return { error: 'Supabase nicht konfiguriert. Bitte .env Datei pruefen.' };
+    }
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email,
+    });
+
+    if (error) {
+      return { error: translateError(error.message) };
+    }
+
+    return { error: null };
+  };
 
   // Update profile
   const updateProfile = async (updates: Partial<Profile>) => {
@@ -265,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateProfile,
     updatePassword,
     refreshProfile,
+    resendConfirmationEmail,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

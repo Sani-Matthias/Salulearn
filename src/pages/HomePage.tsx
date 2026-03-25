@@ -1,10 +1,8 @@
 import { Link } from 'react-router-dom'
-import type { ProgressState } from '../App'
+import type { ProgressState } from '../services/progressService'
 
 type HomePageProps = {
   progress: ProgressState
-  onStartMission: () => void
-  onWrongTry: () => void
 }
 
 const pathNodes = [

@@ -1,30 +1,21 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
-import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import HomePage from './pages/HomePage'
-import LearnPage from './pages/LearnPage'
-import LessonPage from './pages/LessonPage'
-import ProfilePage from './pages/ProfilePage'
-import StreakCalendar from './components/StreakCalendar'
-import AuthModal from './components/AuthModal'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { syncProgress, loadLocalProgress, saveLocalProgress, saveCloudProgress, calculateStreak, type ProgressState } from './services/progressService'
-
-// Confetti colors
-const CONFETTI_COLORS = ['#ff7ab5', '#5cd3ff', '#8fd867', '#9b7bff', '#f7b500', '#f97316']
-
-// Generate random confetti pieces
-const generateConfetti = () => {
-  return Array.from({ length: 50 }, (_, i) => ({
-    id: i,
-    left: Math.random() * 100,
-    delay: Math.random() * 2,
-    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    size: 8 + Math.random() * 8,
-  }))
-}
-
-// Re-export ProgressState for backwards compatibility
-export type { ProgressState } from './services/progressService'
+import { useState, useMemo, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Link, NavLink, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import type { ProgressState } from './services/progressService';
+import {
+  calculateStreak,
+  loadLocalProgress,
+  saveLocalProgress,
+  syncProgress,
+  saveCloudProgress,
+} from './services/progressService';
+import HomePage from './pages/HomePage';
+import LearnPage from './pages/LearnPage';
+import ProfilePage from './pages/ProfilePage';
+import LessonPage from './pages/LessonPage';
+import LoginPage from './pages/LoginPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import StreakCalendar from './components/StreakCalendar';
 
 // Get today's date in local timezone (YYYY-MM-DD)
 const getLocalToday = () => {
@@ -54,10 +45,6 @@ const dailyMissions = [
 function AppContent() {
   const { user, profile, isOnlineMode } = useAuth()
   const [progress, setProgress] = useState<ProgressState>(defaultProgress)
-  const [showLogin, setShowLogin] = useState(false)
-  const [showConfetti, setShowConfetti] = useState(false)
-  const [confettiPieces, setConfettiPieces] = useState<ReturnType<typeof generateConfetti>>([])
-  const [toast, setToast] = useState<{ message: string; xp: number } | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [streakUpdated, setStreakUpdated] = useState(false)
   const location = useLocation()
@@ -150,51 +137,6 @@ function AppContent() {
     }
   }, [location.pathname])
 
-  const triggerCelebration = useCallback((xp: number) => {
-    // Trigger confetti
-    setConfettiPieces(generateConfetti())
-    setShowConfetti(true)
-    setTimeout(() => setShowConfetti(false), 3000)
-
-    // Show toast
-    setToast({ message: 'Mission abgeschlossen!', xp })
-    setTimeout(() => setToast(null), 3000)
-  }, [])
-
-  const handleCompleteMission = useCallback((rewardPoints = 60, completionBoost = 0.03, coinReward = 10, missionId?: string) => {
-    setProgress((prev) => {
-      // Check if mission was already claimed
-      if (missionId && prev.claimedMissions.includes(missionId)) {
-        return prev
-      }
-
-      const nextCompletion = Math.min(1, prev.completion + completionBoost)
-      const nextHearts = Math.min(5, prev.hearts + 1)
-      return {
-        ...prev,
-        completion: nextCompletion,
-        points: prev.points + rewardPoints,
-        hearts: nextHearts,
-        coins: prev.coins + coinReward,
-        claimedMissions: missionId ? [...prev.claimedMissions, missionId] : prev.claimedMissions,
-      }
-    })
-    triggerCelebration(rewardPoints)
-  }, [triggerCelebration])
-
-  const handleWrongTry = () => {
-    setProgress((prev) => ({
-      ...prev,
-      hearts: Math.max(0, prev.hearts - 1),
-    }))
-  }
-
-  const handleAuthSuccess = () => {
-    setShowLogin(false)
-    // Reset streakUpdated to trigger sync after login
-    setStreakUpdated(false)
-  }
-
   const handleLogout = () => {
     setProgress(defaultProgress)
   }
@@ -271,9 +213,9 @@ function AppContent() {
                 {isSyncing && <span className="sync-indicator">↻</span>}
               </Link>
             ) : (
-              <button className="cta secondary small" onClick={() => setShowLogin(true)}>
+              <Link className="cta secondary small" to="/login">
                 Einloggen
-              </button>
+              </Link>
             )}
             <Link className="cta primary small" to="/learn">
               Start
@@ -286,44 +228,40 @@ function AppContent() {
           </div>
 
           <Routes>
-            <Route
-              path="/"
-              element={
-                <HomePage
-                  progress={progress}
-                  onStartMission={() => handleCompleteMission(80, 0.05)}
-                  onWrongTry={handleWrongTry}
-                />
-              }
-            />
-            <Route
-              path="/learn"
-              element={
-                <LearnPage
-                  progress={progress}
-                  onCompleteMission={handleCompleteMission}
-                  onWrongTry={handleWrongTry}
-                />
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProfilePage
-                  progress={progress}
-                  onLogout={handleLogout}
-                />
-              }
-            />
-            <Route
-              path="/lesson/:lessonId"
-              element={
-                <LessonPage
-                  onCompleteMission={handleCompleteMission}
-                  onWrongTry={handleWrongTry}
-                />
-              }
-            />
+            <Route element={<ProtectedRoute />}>
+              <Route
+                path="/"
+                element={
+                  <HomePage
+                    progress={progress}
+                  />
+                }
+              />
+              <Route
+                path="/learn"
+                element={
+                  <LearnPage
+                    progress={progress}
+                  />
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProfilePage
+                    progress={progress}
+                    onLogout={handleLogout}
+                  />
+                }
+              />
+              <Route
+                path="/lesson/:lessonId"
+                element={
+                  <LessonPage />
+                }
+              />
+            </Route>
+            <Route path="/login" element={<LoginPage />} />
           </Routes>
         </div>
 
@@ -370,41 +308,6 @@ function AppContent() {
         </aside>
       </div>
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={showLogin}
-        onClose={() => setShowLogin(false)}
-        onSuccess={handleAuthSuccess}
-      />
-
-      {/* Confetti Animation */}
-      {showConfetti && (
-        <div className="confetti-container">
-          {confettiPieces.map((piece) => (
-            <div
-              key={piece.id}
-              className="confetti"
-              style={{
-                left: `${piece.left}%`,
-                backgroundColor: piece.color,
-                width: piece.size,
-                height: piece.size,
-                animationDelay: `${piece.delay}s`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Success Toast */}
-      {toast && (
-        <div className="toast">
-          <span className="toast-icon">🎉</span>
-          <span>{toast.message}</span>
-          <span className="xp-reward">+{toast.xp} XP</span>
-        </div>
-      )}
-
       {/* Mobile Bottom Navigation */}
       <nav className="mobile-nav">
         <NavLink className="mobile-nav-item" to="/">
@@ -434,6 +337,4 @@ function App() {
 }
 
 export default App
-
-
 

@@ -1,10 +1,8 @@
 import ProgressRing from '../components/ProgressRing'
-import type { ProgressState } from '../App'
+import type { ProgressState } from '../services/progressService'
 
 type LearnPageProps = {
   progress: ProgressState
-  onCompleteMission: (rewardPoints?: number, completionBoost?: number, coinReward?: number, missionId?: string) => void
-  onWrongTry: () => void
 }
 
 // Daily missions based on real progress
@@ -67,7 +65,7 @@ function getMonthlyMissions(progress: ProgressState) {
   ]
 }
 
-function LearnPage({ progress, onCompleteMission }: LearnPageProps) {
+function LearnPage({ progress }: LearnPageProps) {
   const dailyMissions = getDailyMissions(progress)
   const monthlyMissions = getMonthlyMissions(progress)
 
@@ -125,7 +123,7 @@ function LearnPage({ progress, onCompleteMission }: LearnPageProps) {
                   ) : (
                     <button
                       className={`cta secondary ${isComplete ? 'claimable' : ''}`}
-                      onClick={() => onCompleteMission(mission.reward, 0.02, mission.pflaster, mission.id)}
+                      onClick={() => {}}
                       disabled={!isComplete}
                     >
                       {isComplete ? (
@@ -175,7 +173,7 @@ function LearnPage({ progress, onCompleteMission }: LearnPageProps) {
                   ) : (
                     <button
                       className={`cta secondary ${isComplete ? 'claimable' : ''}`}
-                      onClick={() => onCompleteMission(mission.reward, 0.05, mission.pflaster, mission.id)}
+                      onClick={() => {}}
                       disabled={!isComplete}
                     >
                       {isComplete ? (

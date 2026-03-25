@@ -2,12 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getLessonById } from '../data/lessons'
 
-type LessonPageProps = {
-  onCompleteMission: (rewardPoints?: number, completionBoost?: number) => void
-  onWrongTry: () => void
-}
-
-function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
+function LessonPage() {
   const { lessonId } = useParams<{ lessonId: string }>()
   const navigate = useNavigate()
   const lesson = getLessonById(lessonId || '')
@@ -65,10 +60,9 @@ function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
       setCurrentStep(currentStep + 1)
     } else {
       // Lesson complete
-      onCompleteMission(lesson.xpReward, 0.05)
       navigate('/')
     }
-  }, [currentStep, lesson, navigate, onCompleteMission])
+  }, [currentStep, lesson, navigate])
 
   const handleMultipleChoice = (index: number) => {
     if (showResult || !step || step.type !== 'multiple-choice') return
@@ -77,10 +71,6 @@ function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
     setShowResult(true)
     const correct = index === step.correctIndex
     setIsCorrect(correct)
-
-    if (!correct) {
-      onWrongTry()
-    }
   }
 
   const handleTrueFalse = (answer: boolean) => {
@@ -90,10 +80,6 @@ function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
     setShowResult(true)
     const correct = answer === step.correct
     setIsCorrect(correct)
-
-    if (!correct) {
-      onWrongTry()
-    }
   }
 
   const handleOrderingSubmit = () => {
@@ -102,10 +88,6 @@ function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
     setShowResult(true)
     const correct = orderItems.every((item, idx) => item === step.correctOrder[idx])
     setIsCorrect(correct)
-
-    if (!correct) {
-      onWrongTry()
-    }
   }
 
   const moveOrderItem = (fromIndex: number, toIndex: number) => {
@@ -156,7 +138,6 @@ function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
       setRhythmScore(0)
       setShowResult(true)
       setIsCorrect(false)
-      onWrongTry()
       return
     }
 
@@ -180,10 +161,6 @@ function LessonPage({ onCompleteMission, onWrongTry }: LessonPageProps) {
     setRhythmScore(finalScore)
     setShowResult(true)
     setIsCorrect(finalScore >= 60)
-
-    if (finalScore < 60) {
-      onWrongTry()
-    }
   }
 
   if (!lesson) {
