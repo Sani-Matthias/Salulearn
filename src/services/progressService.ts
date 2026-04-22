@@ -1,45 +1,34 @@
-import { supabase, isSupabaseConfigured, ACHIEVEMENTS } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { totalLessons } from '../data/lessons'
 
 export type ProgressState = {
-  completion: number
-  points: number
-  streak: number
-  badges: string[]
-  hearts: number
-  coins: number
-  lastActive: string | null
+  completion: number        // 0–1
+  points: number            // total XP
+  streak: number            // consecutive days
+  badges: string[]          // achievement IDs
+  hearts: number            // lives (max 5)
+  coins: number             // currency
+  lastActive: string | null // YYYY-MM-DD
   completedLessons: string[]
   claimedMissions: string[]
 }
 
-const STORAGE_KEY = 'salu-progress-v1'
+export const MAX_HEARTS = 5
 
-// Load progress from localStorage
-export function loadLocalProgress(): ProgressState {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored) {
-    try {
-      return JSON.parse(stored) as ProgressState
-    } catch {
-      console.error('Failed to parse local progress')
-    }
-  }
-  return getDefaultProgress()
+const STORAGE_KEY = 'salulearn_progress_v2'
+
+const getLocalToday = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// Save progress to localStorage
-export function saveLocalProgress(progress: ProgressState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
-}
-
-// Get default progress state
 export function getDefaultProgress(): ProgressState {
   return {
     completion: 0,
     points: 0,
     streak: 0,
     badges: [],
-    hearts: 5,
+    hearts: MAX_HEARTS,
     coins: 0,
     lastActive: null,
     completedLessons: [],
@@ -47,246 +36,180 @@ export function getDefaultProgress(): ProgressState {
   }
 }
 
-// Load progress from Supabase
-export async function loadCloudProgress(userId: string): Promise<ProgressState | null> {
-  if (!supabase || !isSupabaseConfigured()) return null
-
-  const { data, error } = await supabase
-    .from('user_progress')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // No progress found, create new
-      return null
-    }
-    console.error('Error loading cloud progress:', error)
+export function loadLocalProgress(): ProgressState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as ProgressState
+  } catch {
     return null
   }
+}
 
-  return {
-    completion: data.completion,
-    points: data.points,
-    streak: data.streak,
-    badges: data.badges || [],
-    hearts: data.hearts,
-    coins: data.coins || 0,
-    lastActive: data.last_active,
-    completedLessons: data.completed_lessons || [],
-    claimedMissions: data.claimed_missions || [],
+export function saveLocalProgress(p: ProgressState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
+  } catch {
+    // ignore storage errors
   }
 }
 
-// Save progress to Supabase
-export async function saveCloudProgress(
-  userId: string,
-  progress: ProgressState
-): Promise<boolean> {
-  if (!supabase || !isSupabaseConfigured()) return false
-
-  const { error } = await supabase
-    .from('user_progress')
-    .upsert({
-      user_id: userId,
-      completion: progress.completion,
-      points: progress.points,
-      streak: progress.streak,
-      badges: progress.badges,
-      hearts: progress.hearts,
-      coins: progress.coins,
-      last_active: progress.lastActive,
-      completed_lessons: progress.completedLessons,
-      claimed_missions: progress.claimedMissions,
-      updated_at: new Date().toISOString(),
-    }, {
-      onConflict: 'user_id',
-    })
-
-  if (error) {
-    console.error('Error saving cloud progress:', error)
-    return false
-  }
-
-  return true
-}
-
-// Sync local and cloud progress (cloud takes precedence if newer)
-export async function syncProgress(
-  userId: string,
-  localProgress: ProgressState
-): Promise<ProgressState> {
-  if (!isSupabaseConfigured()) {
-    return localProgress
-  }
-
-  const cloudProgress = await loadCloudProgress(userId)
-
-  if (!cloudProgress) {
-    // No cloud progress, upload local
-    await saveCloudProgress(userId, localProgress)
-    return localProgress
-  }
-
-  // Merge: take the better values (higher XP, streak, completion)
-  // Use cloud lastActive as source of truth for streak calculation
-  const merged: ProgressState = {
-    completion: Math.max(localProgress.completion, cloudProgress.completion),
-    points: Math.max(localProgress.points, cloudProgress.points),
-    streak: cloudProgress.streak, // Use cloud streak as source of truth
-    hearts: cloudProgress.hearts, // Use cloud hearts (more recent state)
-    coins: Math.max(localProgress.coins || 0, cloudProgress.coins || 0),
-    badges: [...new Set([...localProgress.badges, ...cloudProgress.badges])],
-    lastActive: cloudProgress.lastActive, // Use cloud lastActive
-    completedLessons: [...new Set([...(localProgress.completedLessons || []), ...(cloudProgress.completedLessons || [])])],
-    claimedMissions: [...new Set([...(localProgress.claimedMissions || []), ...(cloudProgress.claimedMissions || [])])],
-  }
-
-  // Save merged progress
-  await saveCloudProgress(userId, merged)
-  saveLocalProgress(merged)
-
-  return merged
-}
-
-// Get today's date in local timezone (YYYY-MM-DD)
-function getLocalToday(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
-
-// Parse date string (YYYY-MM-DD) as local date at midnight
-function parseLocalDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  return new Date(year, month - 1, day, 0, 0, 0, 0)
-}
-
-// Update streak based on last active date
-export function calculateStreak(lastActive: string | null, currentStreak: number): { streak: number; isNewDay: boolean } {
+export function calculateStreak(
+  lastActive: string | null,
+  currentStreak: number
+): { streak: number; isNewDay: boolean } {
   const today = getLocalToday()
+  if (!lastActive) return { streak: 1, isNewDay: true }
+  if (lastActive === today) return { streak: currentStreak, isNewDay: false }
 
-  // First time user or no lastActive
-  if (!lastActive) {
-    return { streak: 1, isNewDay: true }
-  }
+  const last = new Date(lastActive)
+  const now = new Date(today)
+  const diffDays = Math.round((now.getTime() - last.getTime()) / 86400000)
 
-  // Already visited today
-  if (lastActive === today) {
-    return { streak: currentStreak, isNewDay: false }
-  }
-
-  // Calculate days difference using local dates
-  const lastDate = parseLocalDate(lastActive)
-  const todayDate = parseLocalDate(today)
-  const diffTime = todayDate.getTime() - lastDate.getTime()
-  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 1) {
-    // Consecutive day - increment streak
-    return { streak: currentStreak + 1, isNewDay: true }
-  } else if (diffDays > 1) {
-    // Missed days - reset streak to 1
-    return { streak: 1, isNewDay: true }
-  } else if (diffDays < 0) {
-    // Future date (clock changed?) - keep current state
-    return { streak: currentStreak, isNewDay: false }
-  }
-
-  // Same day (shouldn't happen but handle edge case)
+  if (diffDays === 1) return { streak: currentStreak + 1, isNewDay: true }
+  if (diffDays > 1) return { streak: 1, isNewDay: true }
   return { streak: currentStreak, isNewDay: false }
 }
 
-// Check and unlock achievements
-export async function checkAchievements(
-  userId: string,
-  progress: ProgressState
-): Promise<string[]> {
-  if (!supabase || !isSupabaseConfigured()) return []
+export function completeLesson(
+  prev: ProgressState,
+  lessonId: string,
+  xpReward: number,
+  heartsLost: number = 0
+): ProgressState {
+  if (prev.completedLessons.includes(lessonId)) return prev
 
-  const newAchievements: string[] = []
+  const completedLessons = [...prev.completedLessons, lessonId]
+  const completion = completedLessons.length / totalLessons
+  const points = prev.points + xpReward
+  const hearts = Math.max(0, Math.min(MAX_HEARTS, prev.hearts - heartsLost))
+  const coins = prev.coins + Math.floor(xpReward / 5)
 
-  // Get existing achievements
-  const { data: existingAchievements } = await supabase
-    .from('achievements')
-    .select('achievement_type')
-    .eq('user_id', userId)
+  const today = getLocalToday()
+  const { streak, isNewDay } = calculateStreak(prev.lastActive, prev.streak)
 
-  const unlockedTypes = new Set(existingAchievements?.map(a => a.achievement_type) || [])
+  const next: ProgressState = {
+    ...prev,
+    completedLessons,
+    completion,
+    points,
+    hearts,
+    coins,
+    streak,
+    lastActive: isNewDay ? today : prev.lastActive,
+    badges: checkBadges({ ...prev, points, streak, completedLessons }),
+  }
 
-  // Check each achievement
-  const checks: { type: string; condition: boolean }[] = [
-    { type: ACHIEVEMENTS.FIRST_LOGIN.id, condition: true },
-    { type: ACHIEVEMENTS.STREAK_3.id, condition: progress.streak >= 3 },
-    { type: ACHIEVEMENTS.STREAK_7.id, condition: progress.streak >= 7 },
-    { type: ACHIEVEMENTS.STREAK_30.id, condition: progress.streak >= 30 },
-    { type: ACHIEVEMENTS.XP_100.id, condition: progress.points >= 100 },
-    { type: ACHIEVEMENTS.XP_500.id, condition: progress.points >= 500 },
-    { type: ACHIEVEMENTS.XP_1000.id, condition: progress.points >= 1000 },
-    { type: ACHIEVEMENTS.HALF_COMPLETE.id, condition: progress.completion >= 0.5 },
-    { type: ACHIEVEMENTS.FULL_HEARTS.id, condition: progress.hearts === 5 },
-  ]
+  saveLocalProgress(next)
+  return next
+}
 
-  for (const check of checks) {
-    if (check.condition && !unlockedTypes.has(check.type)) {
-      const { error } = await supabase
-        .from('achievements')
-        .insert({
-          user_id: userId,
-          achievement_type: check.type,
-        })
+function checkBadges(p: ProgressState): string[] {
+  const badges = new Set(p.badges)
+  if (p.completedLessons.length >= 1) badges.add('first_mission')
+  if (p.points >= 100) badges.add('xp_100')
+  if (p.points >= 500) badges.add('xp_500')
+  if (p.points >= 1000) badges.add('xp_1000')
+  if (p.streak >= 3) badges.add('streak_3')
+  if (p.streak >= 7) badges.add('streak_7')
+  if (p.streak >= 30) badges.add('streak_30')
+  if (p.completion >= 0.5) badges.add('half_complete')
+  if (p.completion >= 1) badges.add('full_complete')
+  return Array.from(badges)
+}
 
-      if (!error) {
-        newAchievements.push(check.type)
-      }
+export function loseHeart(prev: ProgressState): ProgressState {
+  const hearts = Math.max(0, prev.hearts - 1)
+  const next = { ...prev, hearts }
+  saveLocalProgress(next)
+  return next
+}
+
+export function calculateLevel(points: number): number {
+  if (points < 100) return 1
+  if (points < 300) return 2
+  if (points < 600) return 3
+  if (points < 1000) return 4
+  if (points < 1500) return 5
+  return Math.floor(points / 300) + 1
+}
+
+export function getLeague(points: number): { name: string; emoji: string; color: string } {
+  if (points >= 2000) return { name: 'Diamant', emoji: '💎', color: '#1CB0F6' }
+  if (points >= 1000) return { name: 'Gold', emoji: '🥇', color: '#FFD700' }
+  if (points >= 500)  return { name: 'Silber', emoji: '🥈', color: '#C0C0C0' }
+  if (points >= 100)  return { name: 'Bronze', emoji: '🥉', color: '#CD7F32' }
+  return { name: 'Anfänger', emoji: '🌱', color: '#58CC02' }
+}
+
+// ── Cloud sync ──────────────────────────────────────────────
+
+export async function loadCloudProgress(userId: string): Promise<ProgressState | null> {
+  if (!supabase) return null
+  try {
+    const { data } = await supabase
+      .from('user_progress')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    if (!data) return null
+    return {
+      completion: data.completion ?? 0,
+      points: data.points ?? 0,
+      streak: data.streak ?? 0,
+      badges: data.badges ?? [],
+      hearts: data.hearts ?? MAX_HEARTS,
+      coins: (data as Record<string, unknown>).coins as number ?? 0,
+      lastActive: data.last_active ?? null,
+      completedLessons: (data as Record<string, unknown>).completed_lessons as string[] ?? [],
+      claimedMissions: (data as Record<string, unknown>).claimed_missions as string[] ?? [],
     }
-  }
-
-  return newAchievements
-}
-
-// Get all achievements for a user
-export async function getUserAchievements(userId: string): Promise<string[]> {
-  if (!supabase || !isSupabaseConfigured()) return []
-
-  const { data, error } = await supabase
-    .from('achievements')
-    .select('achievement_type')
-    .eq('user_id', userId)
-
-  if (error) {
-    console.error('Error fetching achievements:', error)
-    return []
-  }
-
-  return data.map(a => a.achievement_type)
-}
-
-// Calculate level based on XP
-export function calculateLevel(xp: number): { level: number; currentXp: number; nextLevelXp: number } {
-  // XP needed per level increases: 100, 200, 300, etc.
-  let level = 1
-  let totalXpNeeded = 0
-  let xpForCurrentLevel = 100
-
-  while (totalXpNeeded + xpForCurrentLevel <= xp) {
-    totalXpNeeded += xpForCurrentLevel
-    level++
-    xpForCurrentLevel = level * 100
-  }
-
-  return {
-    level,
-    currentXp: xp - totalXpNeeded,
-    nextLevelXp: xpForCurrentLevel,
+  } catch {
+    return null
   }
 }
 
-// Get league based on XP
-export function getLeague(xp: number): { name: string; icon: string; color: string } {
-  if (xp >= 5000) return { name: 'Diamant', icon: '💎', color: 'diamond' }
-  if (xp >= 2500) return { name: 'Gold', icon: '🥇', color: 'gold' }
-  if (xp >= 1000) return { name: 'Silber', icon: '🥈', color: 'silver' }
-  if (xp >= 500) return { name: 'Bronze', icon: '🥉', color: 'bronze' }
-  return { name: 'Starter', icon: '🌱', color: 'starter' }
+export async function saveCloudProgress(userId: string, p: ProgressState) {
+  if (!supabase) return
+  try {
+    await supabase.from('user_progress').upsert({
+      user_id: userId,
+      completion: p.completion,
+      points: p.points,
+      streak: p.streak,
+      badges: p.badges,
+      hearts: p.hearts,
+      coins: p.coins,
+      last_active: p.lastActive,
+      completed_lessons: p.completedLessons,
+      claimed_missions: p.claimedMissions,
+      updated_at: new Date().toISOString(),
+    })
+  } catch {
+    // ignore cloud errors
+  }
+}
+
+export async function syncProgress(userId: string, local: ProgressState): Promise<ProgressState> {
+  const cloud = await loadCloudProgress(userId)
+  if (!cloud) return local
+
+  // merge: take highest values
+  const merged: ProgressState = {
+    completion: Math.max(local.completion, cloud.completion),
+    points: Math.max(local.points, cloud.points),
+    streak: Math.max(local.streak, cloud.streak),
+    badges: Array.from(new Set([...local.badges, ...cloud.badges])),
+    hearts: Math.max(local.hearts, cloud.hearts),
+    coins: Math.max(local.coins, cloud.coins),
+    lastActive: local.lastActive && cloud.lastActive
+      ? (local.lastActive > cloud.lastActive ? local.lastActive : cloud.lastActive)
+      : local.lastActive ?? cloud.lastActive,
+    completedLessons: Array.from(new Set([...local.completedLessons, ...cloud.completedLessons])),
+    claimedMissions: Array.from(new Set([...local.claimedMissions, ...cloud.claimedMissions])),
+  }
+  merged.completion = merged.completedLessons.length / totalLessons
+
+  return merged
 }

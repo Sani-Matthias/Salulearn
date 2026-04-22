@@ -1,420 +1,378 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
 import { getLessonById } from '../data/lessons'
+import type { ProgressState } from '../services/progressService'
+import { MAX_HEARTS } from '../services/progressService'
 
-function LessonPage() {
-  const { lessonId } = useParams<{ lessonId: string }>()
-  const navigate = useNavigate()
-  const lesson = getLessonById(lessonId || '')
+type Props = {
+  progress: ProgressState
+  onComplete: (lessonId: string, xpReward: number, heartsLost: number) => void
+  onExit: () => void
+}
 
-  const [currentStep, setCurrentStep] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null)
-  const [showResult, setShowResult] = useState(false)
+// Confetti particle
+type Piece = { id: number; x: number; color: string; size: number; delay: number; duration: number }
+
+function Confetti() {
+  const [pieces, setPieces] = useState<Piece[]>([])
+  useEffect(() => {
+    const colors = ['#FF4B4B', '#58CC02', '#FFC800', '#1CB0F6', '#CE82FF', '#FF9600']
+    const ps: Piece[] = Array.from({ length: 60 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      color: colors[i % colors.length],
+      size: 6 + Math.random() * 8,
+      delay: Math.random() * 1.2,
+      duration: 2.5 + Math.random() * 1.5,
+    }))
+    setPieces(ps)
+  }, [])
+
+  return (
+    <>
+      {pieces.map(p => (
+        <div
+          key={p.id}
+          className="confetti-piece"
+          style={{
+            left: `${p.x}%`,
+            top: '-20px',
+            width: p.size,
+            height: p.size,
+            background: p.color,
+            animationDuration: `${p.duration}s`,
+            animationDelay: `${p.delay}s`,
+            borderRadius: p.id % 3 === 0 ? '50%' : 3,
+          }}
+        />
+      ))}
+    </>
+  )
+}
+
+export default function LessonPage({ progress, onComplete, onExit }: Props) {
+  // Extract lessonId from URL
+  const lessonId = window.location.pathname.split('/lesson/')[1] ?? ''
+  const lesson = getLessonById(lessonId)
+
+  const [stepIdx, setStepIdx] = useState(0)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [tfAnswer, setTfAnswer] = useState<boolean | null>(null)
+  const [showFeedback, setShowFeedback] = useState(false)
   const [isCorrect, setIsCorrect] = useState(false)
   const [orderItems, setOrderItems] = useState<number[]>([])
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [hearts, setHearts] = useState(progress.hearts)
+  const [heartsLost, setHeartsLost] = useState(0)
+  const [showComplete, setShowComplete] = useState(false)
+  const [alreadyCompleted] = useState(() => progress.completedLessons.includes(lessonId))
+  const dragRef = useRef<number | null>(null)
 
-  // Rhythm game state
-  const [rhythmActive, setRhythmActive] = useState(false)
-  const [rhythmTaps, setRhythmTaps] = useState<number[]>([])
-  const [rhythmScore, setRhythmScore] = useState<number | null>(null)
-  const [rhythmTimeLeft, setRhythmTimeLeft] = useState(0)
-  const rhythmStartTime = useRef<number>(0)
-  const rhythmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const step = lesson?.steps[stepIdx]
+  const totalSteps = lesson?.steps.length ?? 1
+  const progressPct = totalSteps > 1 ? (stepIdx / (totalSteps - 1)) * 100 : 0
 
-  const step = lesson?.steps[currentStep]
-
-  // Initialize ordering question
+  // Init ordering items
   useEffect(() => {
     if (step?.type === 'ordering') {
       const indices = step.items.map((_, i) => i)
-      // Shuffle
       for (let i = indices.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [indices[i], indices[j]] = [indices[j], indices[i]]
       }
       setOrderItems(indices)
     }
-  }, [currentStep, step])
+    setSelected(null)
+    setTfAnswer(null)
+    setShowFeedback(false)
+  }, [stepIdx])
 
-  // Cleanup rhythm timer
-  useEffect(() => {
-    return () => {
-      if (rhythmTimerRef.current) {
-        clearInterval(rhythmTimerRef.current)
-      }
-    }
-  }, [])
-
-  const handleNext = useCallback(() => {
+  const goNext = useCallback(() => {
     if (!lesson) return
-
-    setSelectedAnswer(null)
-    setShowResult(false)
-    setIsCorrect(false)
-    setRhythmActive(false)
-    setRhythmTaps([])
-    setRhythmScore(null)
-
-    if (currentStep < lesson.steps.length - 1) {
-      setCurrentStep(currentStep + 1)
-    } else {
-      // Lesson complete
-      navigate('/')
-    }
-  }, [currentStep, lesson, navigate])
-
-  const handleMultipleChoice = (index: number) => {
-    if (showResult || !step || step.type !== 'multiple-choice') return
-
-    setSelectedAnswer(index)
-    setShowResult(true)
-    const correct = index === step.correctIndex
-    setIsCorrect(correct)
-  }
-
-  const handleTrueFalse = (answer: boolean) => {
-    if (showResult || !step || step.type !== 'true-false') return
-
-    setSelectedAnswer(answer ? 1 : 0)
-    setShowResult(true)
-    const correct = answer === step.correct
-    setIsCorrect(correct)
-  }
-
-  const handleOrderingSubmit = () => {
-    if (!step || step.type !== 'ordering') return
-
-    setShowResult(true)
-    const correct = orderItems.every((item, idx) => item === step.correctOrder[idx])
-    setIsCorrect(correct)
-  }
-
-  const moveOrderItem = (fromIndex: number, toIndex: number) => {
-    if (showResult) return
-    const newOrder = [...orderItems]
-    const [removed] = newOrder.splice(fromIndex, 1)
-    newOrder.splice(toIndex, 0, removed)
-    setOrderItems(newOrder)
-  }
-
-  const startRhythm = () => {
-    if (!step || step.type !== 'rhythm') return
-
-    setRhythmActive(true)
-    setRhythmTaps([])
-    setRhythmScore(null)
-    setRhythmTimeLeft(step.duration)
-    rhythmStartTime.current = Date.now()
-
-    rhythmTimerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - rhythmStartTime.current) / 1000
-      const remaining = Math.max(0, step.duration - elapsed)
-      setRhythmTimeLeft(Math.ceil(remaining))
-
-      if (remaining <= 0) {
-        if (rhythmTimerRef.current) {
-          clearInterval(rhythmTimerRef.current)
-        }
-        finishRhythm()
-      }
-    }, 100)
-  }
-
-  const handleRhythmTap = () => {
-    if (!rhythmActive || !step || step.type !== 'rhythm') return
-
-    const now = Date.now()
-    setRhythmTaps(prev => [...prev, now])
-  }
-
-  const finishRhythm = () => {
-    if (!step || step.type !== 'rhythm') return
-
-    setRhythmActive(false)
-
-    // Calculate score based on rhythm consistency
-    if (rhythmTaps.length < 5) {
-      setRhythmScore(0)
-      setShowResult(true)
-      setIsCorrect(false)
+    if (stepIdx + 1 >= totalSteps) {
+      setShowComplete(true)
       return
     }
+    setStepIdx(s => s + 1)
+    setSelected(null)
+    setTfAnswer(null)
+    setShowFeedback(false)
+  }, [stepIdx, totalSteps, lesson])
 
-    const intervals: number[] = []
-    for (let i = 1; i < rhythmTaps.length; i++) {
-      intervals.push(rhythmTaps[i] - rhythmTaps[i - 1])
+  const handleMultiChoice = (idx: number) => {
+    if (showFeedback || !step || step.type !== 'multiple-choice') return
+    setSelected(idx)
+    const correct = idx === step.correctIndex
+    setIsCorrect(correct)
+    if (!correct && !alreadyCompleted) {
+      setHearts(h => Math.max(0, h - 1))
+      setHeartsLost(hl => hl + 1)
     }
+    setShowFeedback(true)
+  }
 
-    const targetInterval = 60000 / step.bpm // ms between beats
-    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
+  const handleTF = (answer: boolean) => {
+    if (showFeedback || !step || step.type !== 'true-false') return
+    setTfAnswer(answer)
+    const correct = answer === step.correct
+    setIsCorrect(correct)
+    if (!correct && !alreadyCompleted) {
+      setHearts(h => Math.max(0, h - 1))
+      setHeartsLost(hl => hl + 1)
+    }
+    setShowFeedback(true)
+  }
 
-    // Score based on how close to target BPM
-    const bpmAccuracy = Math.max(0, 100 - Math.abs(avgInterval - targetInterval) / targetInterval * 100)
+  const handleOrderingCheck = () => {
+    if (!step || step.type !== 'ordering') return
+    const correct = orderItems.every((item, idx) => item === step.correctOrder[idx])
+    setIsCorrect(correct)
+    if (!correct && !alreadyCompleted) {
+      setHearts(h => Math.max(0, h - 1))
+      setHeartsLost(hl => hl + 1)
+    }
+    setShowFeedback(true)
+  }
 
-    // Score based on consistency (standard deviation)
-    const variance = intervals.reduce((sum, int) => sum + Math.pow(int - avgInterval, 2), 0) / intervals.length
-    const stdDev = Math.sqrt(variance)
-    const consistencyScore = Math.max(0, 100 - (stdDev / avgInterval) * 100)
+  const moveItem = (from: number, to: number) => {
+    if (showFeedback) return
+    const arr = [...orderItems]
+    const [el] = arr.splice(from, 1)
+    arr.splice(to, 0, el)
+    setOrderItems(arr)
+  }
 
-    const finalScore = Math.round((bpmAccuracy * 0.6 + consistencyScore * 0.4))
-    setRhythmScore(finalScore)
-    setShowResult(true)
-    setIsCorrect(finalScore >= 60)
+  const handleFinish = () => {
+    if (!lesson) return
+    onComplete(lesson.id, lesson.xpReward, heartsLost)
+    onExit()
   }
 
   if (!lesson) {
     return (
-      <div className="lesson-container">
-        <div className="card lesson-card">
-          <h2>Lektion nicht gefunden</h2>
-          <button className="cta primary" onClick={() => navigate('/')}>
-            Zurueck zum Lernpfad
+      <div className="lesson-page" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', padding: 24 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>Lektion nicht gefunden</div>
+          <button className="main-btn red" style={{ marginTop: 20 }} onClick={onExit}>Zurück</button>
+        </div>
+      </div>
+    )
+  }
+
+  // COMPLETE SCREEN
+  if (showComplete) {
+    const xpEarned = alreadyCompleted ? 0 : lesson.xpReward
+    return (
+      <div className="lesson-page">
+        <Confetti />
+        <div className="complete-screen">
+          <div className="complete-trophy">🏆</div>
+          <div className="complete-title">Super gemacht!</div>
+          <div className="complete-subtitle">
+            Du hast „{lesson.title}" erfolgreich abgeschlossen.
+          </div>
+          <div className="complete-stats">
+            <div className="complete-stat">
+              <div className="complete-stat-icon">⭐</div>
+              <div className="complete-stat-val">+{xpEarned}</div>
+              <div className="complete-stat-lbl">XP verdient</div>
+            </div>
+            <div className="complete-stat">
+              <div className="complete-stat-icon">❤️</div>
+              <div className="complete-stat-val">{hearts}</div>
+              <div className="complete-stat-lbl">Herzen übrig</div>
+            </div>
+            <div className="complete-stat">
+              <div className="complete-stat-icon">✅</div>
+              <div className="complete-stat-val">{totalSteps - 2}</div>
+              <div className="complete-stat-lbl">Fragen</div>
+            </div>
+          </div>
+          <button className="main-btn green" style={{ width: '100%' }} onClick={handleFinish}>
+            Weiter →
           </button>
         </div>
       </div>
     )
   }
 
-  const progress = ((currentStep + 1) / lesson.steps.length) * 100
-
   return (
-    <div className="lesson-container">
-      <div className="lesson-header">
-        <button className="lesson-close" onClick={() => navigate('/')}>
-          ✕
-        </button>
-        <div className="lesson-progress-bar">
-          <div className="lesson-progress-fill" style={{ width: `${progress}%` }} />
+    <div className="lesson-page">
+      {/* Top bar */}
+      <div className="lesson-topbar">
+        <button className="lesson-exit-btn" onClick={onExit} aria-label="Schließen">✕</button>
+        <div className="lesson-progress-track">
+          <div className="lesson-progress-fill" style={{ width: `${progressPct}%` }} />
         </div>
-        <div className="lesson-xp">
-          <span className="lesson-icon">{lesson.icon}</span>
-          <span>+{lesson.xpReward} XP</span>
+        <div className="hearts-row">
+          {Array.from({ length: MAX_HEARTS }).map((_, i) => (
+            <span key={i} className={`heart-icon${i >= hearts ? ' empty' : ''}`}>❤️</span>
+          ))}
         </div>
       </div>
 
-      <div className="card lesson-card">
-        {step?.type === 'text' && (
-          <div className="lesson-text">
-            <h2>{step.title}</h2>
-            <p className="lesson-content">{step.content}</p>
-            <button className="cta primary lesson-next" onClick={handleNext}>
-              Weiter
+      {/* Body */}
+      <div className="lesson-body">
+        {/* INTRO */}
+        {step?.type === 'intro' && (
+          <div className="slide-intro">
+            <span className="intro-emoji">{step.emoji}</span>
+            <div className="intro-title">{step.title}</div>
+            <div className="intro-subtitle">{step.subtitle}</div>
+            <button className="main-btn red" style={{ width: '100%', marginTop: 8 }} onClick={goNext}>
+              Los geht's!
             </button>
           </div>
         )}
 
+        {/* TEXT */}
+        {step?.type === 'text' && (
+          <div className="slide-text" style={{ animation: 'slide-up 0.4s ease' }}>
+            {step.emoji && <div className="text-slide-emoji">{step.emoji}</div>}
+            <div className="text-slide-title">{step.title}</div>
+            <div className={`text-slide-content${step.style === 'info' ? ' info-box' : step.style === 'warning' ? ' warning-box' : ''}`}>
+              {step.content}
+            </div>
+            <button className="main-btn blue" onClick={goNext}>Weiter →</button>
+          </div>
+        )}
+
+        {/* MULTIPLE CHOICE */}
         {step?.type === 'multiple-choice' && (
-          <div className="lesson-quiz">
-            <h2>{step.question}</h2>
-            <div className="quiz-options">
-              {step.options.map((option, index) => (
-                <button
-                  key={index}
-                  className={`quiz-option ${
-                    showResult
-                      ? index === step.correctIndex
-                        ? 'correct'
-                        : selectedAnswer === index
-                          ? 'wrong'
-                          : ''
-                      : selectedAnswer === index
-                        ? 'selected'
-                        : ''
-                  }`}
-                  onClick={() => handleMultipleChoice(index)}
-                  disabled={showResult}
-                >
-                  <span className="option-letter">{String.fromCharCode(65 + index)}</span>
-                  <span className="option-text">{option}</span>
-                </button>
-              ))}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div className="question-type-label">Wähle die richtige Antwort</div>
+            <div className="question-text">{step.question}</div>
+            <div className="options-list">
+              {step.options.map((opt, i) => {
+                let cls = 'option-btn'
+                if (showFeedback) {
+                  if (i === step.correctIndex) cls += ' correct'
+                  else if (i === selected) cls += ' wrong'
+                } else if (i === selected) cls += ' selected'
+                return (
+                  <button key={i} className={cls} onClick={() => handleMultiChoice(i)} disabled={showFeedback}>
+                    <span className="option-letter">{String.fromCharCode(65 + i)}</span>
+                    <span style={{ flex: 1, textAlign: 'left' }}>{opt}</span>
+                  </button>
+                )
+              })}
             </div>
-            {showResult && (
-              <div className={`quiz-result ${isCorrect ? 'correct' : 'wrong'}`}>
-                <p className="result-title">{isCorrect ? '✓ Richtig!' : '✗ Falsch!'}</p>
-                <p className="result-explanation">{step.explanation}</p>
-                <button className="cta primary lesson-next" onClick={handleNext}>
-                  Weiter
-                </button>
-              </div>
-            )}
           </div>
         )}
 
+        {/* TRUE / FALSE */}
         {step?.type === 'true-false' && (
-          <div className="lesson-quiz">
-            <h2>Richtig oder Falsch?</h2>
-            <p className="true-false-statement">{step.statement}</p>
-            <div className="true-false-buttons">
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div className="question-type-label">Richtig oder Falsch?</div>
+            <div className="tf-statement">{step.statement}</div>
+            <div className="tf-row">
               <button
-                className={`quiz-option true-btn ${
-                  showResult
-                    ? step.correct
-                      ? 'correct'
-                      : selectedAnswer === 1
-                        ? 'wrong'
-                        : ''
+                className={`tf-btn true-btn${
+                  showFeedback
+                    ? step.correct ? ' correct' : tfAnswer === true ? ' wrong' : ''
                     : ''
                 }`}
-                onClick={() => handleTrueFalse(true)}
-                disabled={showResult}
+                onClick={() => handleTF(true)}
+                disabled={showFeedback}
               >
-                ✓ Richtig
+                <span className="tf-btn-icon">✓</span>
+                <span className="tf-btn-text">RICHTIG</span>
               </button>
               <button
-                className={`quiz-option false-btn ${
-                  showResult
-                    ? !step.correct
-                      ? 'correct'
-                      : selectedAnswer === 0
-                        ? 'wrong'
-                        : ''
+                className={`tf-btn false-btn${
+                  showFeedback
+                    ? !step.correct ? ' correct' : tfAnswer === false ? ' wrong' : ''
                     : ''
                 }`}
-                onClick={() => handleTrueFalse(false)}
-                disabled={showResult}
+                onClick={() => handleTF(false)}
+                disabled={showFeedback}
               >
-                ✗ Falsch
+                <span className="tf-btn-icon">✗</span>
+                <span className="tf-btn-text">FALSCH</span>
               </button>
             </div>
-            {showResult && (
-              <div className={`quiz-result ${isCorrect ? 'correct' : 'wrong'}`}>
-                <p className="result-title">{isCorrect ? '✓ Richtig!' : '✗ Falsch!'}</p>
-                <p className="result-explanation">{step.explanation}</p>
-                <button className="cta primary lesson-next" onClick={handleNext}>
-                  Weiter
-                </button>
-              </div>
-            )}
           </div>
         )}
 
+        {/* ORDERING */}
         {step?.type === 'ordering' && (
-          <div className="lesson-ordering">
-            <h2>{step.question}</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div className="question-type-label">Bringe in die richtige Reihenfolge</div>
+            <div className="question-text">{step.question}</div>
             <div className="ordering-list">
-              {orderItems.map((itemIndex, position) => (
-                <div
-                  key={itemIndex}
-                  className={`ordering-item ${
-                    showResult
-                      ? step.correctOrder[position] === itemIndex
-                        ? 'correct'
-                        : 'wrong'
-                      : ''
-                  } ${draggedIndex === position ? 'dragging' : ''}`}
-                  draggable={!showResult}
-                  onDragStart={() => setDraggedIndex(position)}
-                  onDragEnd={() => setDraggedIndex(null)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (draggedIndex !== null) {
-                      moveOrderItem(draggedIndex, position)
-                    }
-                  }}
-                >
-                  <span className="ordering-number">{position + 1}</span>
-                  <span className="ordering-text">{step.items[itemIndex]}</span>
-                  {!showResult && (
-                    <div className="ordering-arrows">
-                      <button
-                        className="arrow-btn"
-                        onClick={() => position > 0 && moveOrderItem(position, position - 1)}
-                        disabled={position === 0}
-                      >
-                        ▲
-                      </button>
-                      <button
-                        className="arrow-btn"
-                        onClick={() => position < orderItems.length - 1 && moveOrderItem(position, position + 1)}
-                        disabled={position === orderItems.length - 1}
-                      >
-                        ▼
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+              {orderItems.map((itemIdx, pos) => {
+                const isC = showFeedback && step.correctOrder[pos] === itemIdx
+                const isW = showFeedback && step.correctOrder[pos] !== itemIdx
+                return (
+                  <div
+                    key={itemIdx}
+                    className={`ordering-item${isC ? ' correct' : isW ? ' wrong' : ''}`}
+                    draggable={!showFeedback}
+                    onDragStart={() => { dragRef.current = pos }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragRef.current !== null) moveItem(dragRef.current, pos)
+                      dragRef.current = null
+                    }}
+                    onDragEnd={() => { dragRef.current = null }}
+                  >
+                    <div className="ordering-num">{pos + 1}</div>
+                    <div className="ordering-text">{step.items[itemIdx]}</div>
+                    {!showFeedback && (
+                      <div className="ordering-arrows">
+                        <button className="arrow-btn" disabled={pos === 0} onClick={() => moveItem(pos, pos - 1)}>▲</button>
+                        <button className="arrow-btn" disabled={pos === orderItems.length - 1} onClick={() => moveItem(pos, pos + 1)}>▼</button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
-            {!showResult && (
-              <button className="cta primary lesson-next" onClick={handleOrderingSubmit}>
-                Pruefen
+            {!showFeedback && (
+              <button className="main-btn blue" style={{ marginTop: 16 }} onClick={handleOrderingCheck}>
+                Prüfen
               </button>
-            )}
-            {showResult && (
-              <div className={`quiz-result ${isCorrect ? 'correct' : 'wrong'}`}>
-                <p className="result-title">{isCorrect ? '✓ Richtig!' : '✗ Falsch!'}</p>
-                <p className="result-explanation">{step.explanation}</p>
-                <button className="cta primary lesson-next" onClick={handleNext}>
-                  Weiter
-                </button>
-              </div>
             )}
           </div>
         )}
 
-        {step?.type === 'rhythm' && (
-          <div className="lesson-rhythm">
-            <h2>{step.title}</h2>
-            <p className="rhythm-instruction">{step.instruction}</p>
-
-            {!rhythmActive && rhythmScore === null && (
-              <div className="rhythm-start">
-                <div className="rhythm-info">
-                  <p>Ziel: {step.bpm} BPM</p>
-                  <p>Dauer: {step.duration} Sekunden</p>
-                </div>
-                <button className="cta primary rhythm-start-btn" onClick={startRhythm}>
-                  Start
-                </button>
-              </div>
-            )}
-
-            {rhythmActive && (
-              <div className="rhythm-game">
-                <div className="rhythm-timer">{rhythmTimeLeft}s</div>
-                <button
-                  className="rhythm-tap-btn"
-                  onClick={handleRhythmTap}
-                  onTouchStart={(e) => {
-                    e.preventDefault()
-                    handleRhythmTap()
-                  }}
-                >
-                  <span className="tap-icon">❤️</span>
-                  <span className="tap-text">TAP!</span>
-                </button>
-                <div className="rhythm-count">Taps: {rhythmTaps.length}</div>
-              </div>
-            )}
-
-            {showResult && rhythmScore !== null && (
-              <div className={`quiz-result ${isCorrect ? 'correct' : 'wrong'}`}>
-                <p className="result-title">
-                  {isCorrect ? '✓ Gut gemacht!' : '✗ Versuch es nochmal!'}
-                </p>
-                <div className="rhythm-score">
-                  <span className="score-value">{rhythmScore}%</span>
-                  <span className="score-label">Rhythmus-Score</span>
-                </div>
-                <p className="result-explanation">
-                  {rhythmScore >= 80
-                    ? 'Exzellent! Du hast den perfekten CPR-Rhythmus!'
-                    : rhythmScore >= 60
-                      ? 'Gut! Dein Rhythmus war akzeptabel.'
-                      : 'Uebe weiter! Versuche gleichmaessiger zu tippen.'}
-                </p>
-                <button className="cta primary lesson-next" onClick={handleNext}>
-                  Weiter
-                </button>
-              </div>
-            )}
+        {/* COMPLETE step – show automatically */}
+        {step?.type === 'complete' && (
+          <div className="slide-intro">
+            <span className="intro-emoji">🎉</span>
+            <div className="intro-title">Lektion fertig!</div>
+            <div className="intro-subtitle">Du hast alle Fragen beantwortet.</div>
+            <button className="main-btn green" style={{ width: '100%' }} onClick={goNext}>Ergebnisse sehen</button>
           </div>
         )}
       </div>
+
+      {/* Feedback bar */}
+      {showFeedback && step && (step.type === 'multiple-choice' || step.type === 'true-false' || step.type === 'ordering') && (
+        <div className={`feedback-bar ${isCorrect ? 'correct' : 'wrong'}`}>
+          <div className="feedback-emoji">{isCorrect ? '🎉' : '😢'}</div>
+          <div className="feedback-title">{isCorrect ? 'Richtig!' : 'Nicht ganz...'}</div>
+          <div className="feedback-expl">{step.explanation}</div>
+          <button
+            className={`feedback-btn`}
+            onClick={goNext}
+            style={{
+              background: isCorrect ? 'var(--success)' : 'var(--primary)',
+              color: 'white',
+              boxShadow: `0 4px 0 ${isCorrect ? 'var(--success-dark)' : 'var(--primary-dark)'}`,
+              borderRadius: 16,
+              border: 'none',
+              width: '100%',
+              padding: '14px',
+              fontSize: 17,
+              fontWeight: 900,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Weiter →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
-
-export default LessonPage

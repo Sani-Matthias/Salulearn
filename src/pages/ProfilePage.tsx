@@ -1,89 +1,50 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { ACHIEVEMENTS } from '../lib/supabase'
-import {
-  getUserAchievements,
-  calculateLevel,
-  getLeague,
-  type ProgressState,
-} from '../services/progressService'
-import { uploadAvatar, deleteAvatar } from '../services/avatarService'
+import type { ProgressState } from '../services/progressService'
+import { calculateLevel, getLeague, MAX_HEARTS } from '../services/progressService'
+import { supabase } from '../lib/supabase'
 
-type ProfilePageProps = {
+type Props = {
   progress: ProgressState
+  onShowAuth: () => void
   onLogout: () => void
 }
 
-export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
-  const { user, profile, updateProfile, updatePassword, signOut, isOnlineMode, refreshProfile } = useAuth()
-  const [isEditing, setIsEditing] = useState(false)
-  const [displayName, setDisplayName] = useState(profile?.display_name || '')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmNewPassword, setConfirmNewPassword] = useState('')
-  const [showPasswordChange, setShowPasswordChange] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [achievements, setAchievements] = useState<string[]>([])
-  const [avatarUploading, setAvatarUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
+  const { user, profile, signOut, updateProfile, isOnlineMode } = useAuth()
+  const [editingName, setEditingName] = useState(false)
+  const [newName, setNewName] = useState(profile?.display_name || '')
+  const [saving, setSaving] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const levelInfo = calculateLevel(progress.points)
+  const level = calculateLevel(progress.points)
   const league = getLeague(progress.points)
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'Gast'
+  const avatarUrl = profile?.avatar_url || null
+  const avatarLetter = displayName[0].toUpperCase()
+  const completedCount = progress.completedLessons.length
 
-  // Load achievements
-  useEffect(() => {
-    if (user && isOnlineMode) {
-      getUserAchievements(user.id).then(setAchievements)
-    }
-  }, [user, isOnlineMode])
+  const earnedBadges = new Set(progress.badges)
 
-  const handleSaveProfile = async () => {
-    if (!displayName.trim()) {
-      setError('Name darf nicht leer sein.')
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    const result = await updateProfile({ display_name: displayName.trim() })
-    if (result.error) {
-      setError(result.error)
-    } else {
-      setSuccess('Profil aktualisiert!')
-      setIsEditing(false)
-      setTimeout(() => setSuccess(null), 3000)
-    }
-
-    setLoading(false)
+  const handleSaveName = async () => {
+    if (!newName.trim()) return
+    setSaving(true)
+    await updateProfile({ display_name: newName.trim() })
+    setEditingName(false)
+    setSaving(false)
   }
 
-  const handlePasswordChange = async () => {
-    if (newPassword.length < 6) {
-      setError('Passwort muss mindestens 6 Zeichen haben.')
-      return
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0] || !supabase || !user) return
+    const file = e.target.files[0]
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/avatar.${ext}`
+    const { error: uploadErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+    if (!uploadErr) {
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      await updateProfile({ avatar_url: data.publicUrl + '?t=' + Date.now() })
     }
-    if (newPassword !== confirmNewPassword) {
-      setError('Passwoerter stimmen nicht ueberein.')
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    const result = await updatePassword(newPassword)
-    if (result.error) {
-      setError(result.error)
-    } else {
-      setSuccess('Passwort geaendert!')
-      setNewPassword('')
-      setConfirmNewPassword('')
-      setShowPasswordChange(false)
-      setTimeout(() => setSuccess(null), 3000)
-    }
-
-    setLoading(false)
   }
 
   const handleLogout = async () => {
@@ -91,323 +52,152 @@ export default function ProfilePage({ progress, onLogout }: ProfilePageProps) {
     onLogout()
   }
 
-  // Avatar initials
-  const getInitials = () => {
-    const name = profile?.display_name || user?.email || 'U'
-    return name.slice(0, 2).toUpperCase()
-  }
-
-  // Handle avatar upload
-  const handleAvatarClick = () => {
-    if (isOnlineMode && !avatarUploading) {
-      fileInputRef.current?.click()
-    }
-  }
-
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !user) return
-
-    console.log('Starting avatar change, file:', file.name, file.size, file.type)
-    setAvatarUploading(true)
-    setError(null)
-
-    try {
-      // Add timeout to prevent infinite loading
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Upload Timeout - bitte versuche es erneut')), 30000)
-      )
-
-      const result = await Promise.race([
-        uploadAvatar(user.id, file),
-        timeoutPromise
-      ])
-
-      if (result.error) {
-        console.error('Upload result error:', result.error)
-        setError(result.error)
-      } else {
-        console.log('Upload successful, refreshing profile')
-        setSuccess('Avatar aktualisiert!')
-        await refreshProfile()
-        setTimeout(() => setSuccess(null), 3000)
-      }
-    } catch (err) {
-      console.error('Avatar upload error:', err)
-      setError(err instanceof Error ? err.message : 'Fehler beim Hochladen')
-    } finally {
-      setAvatarUploading(false)
-      // Reset input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-    }
-  }
-
-  const handleDeleteAvatar = async () => {
-    if (!user || !profile?.avatar_url) return
-
-    setAvatarUploading(true)
-    setError(null)
-
-    const result = await deleteAvatar(user.id, profile.avatar_url)
-
-    if (result.error) {
-      setError(result.error)
-    } else {
-      setSuccess('Avatar entfernt!')
-      await refreshProfile()
-      setTimeout(() => setSuccess(null), 3000)
-    }
-
-    setAvatarUploading(false)
-  }
-
-  const allAchievements = Object.values(ACHIEVEMENTS)
-
   return (
-    <div className="profile-layout">
-      <div className="profile-main">
-        {/* Profile Header Card */}
-        <section className="card profile-header-card">
-          <div className="profile-header">
-            <div className="profile-avatar-section">
-              <div
-                className={`profile-avatar large ${isOnlineMode ? 'clickable' : ''} ${avatarUploading ? 'uploading' : ''}`}
-                onClick={handleAvatarClick}
-                title={isOnlineMode ? 'Klicke um Avatar zu aendern' : ''}
-              >
-                {profile?.avatar_url ? (
-                  <img src={profile.avatar_url} alt="Avatar" />
-                ) : (
-                  <span>{getInitials()}</span>
-                )}
-                {isOnlineMode && (
-                  <div className="avatar-overlay">
-                    {avatarUploading ? (
-                      <span className="avatar-spinner" />
-                    ) : (
-                      <span className="avatar-edit-icon">📷</span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={handleAvatarChange}
-                style={{ display: 'none' }}
-              />
-              {isOnlineMode && profile?.avatar_url && (
-                <button
-                  className="cta tiny ghost avatar-delete-btn"
-                  onClick={handleDeleteAvatar}
-                  disabled={avatarUploading}
-                >
-                  Avatar entfernen
-                </button>
-              )}
-              <div className={`league-badge ${league.color}`}>
-                <span className="league-icon">{league.icon}</span>
-                <span>{league.name}</span>
-              </div>
-            </div>
-
-            <div className="profile-info">
-              {isEditing ? (
-                <div className="profile-edit-form">
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="profile-name-input"
-                    placeholder="Dein Name"
-                  />
-                  <div className="profile-edit-actions">
-                    <button
-                      className="cta small primary"
-                      onClick={handleSaveProfile}
-                      disabled={loading}
-                    >
-                      Speichern
-                    </button>
-                    <button
-                      className="cta small ghost"
-                      onClick={() => {
-                        setIsEditing(false)
-                        setDisplayName(profile?.display_name || '')
-                      }}
-                    >
-                      Abbrechen
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <h2 className="profile-name">
-                    {profile?.display_name || user?.email?.split('@')[0] || 'User'}
-                  </h2>
-                  <p className="profile-email">{user?.email || 'Offline-Modus'}</p>
-                  {isOnlineMode && (
-                    <button
-                      className="cta tiny ghost"
-                      onClick={() => setIsEditing(true)}
-                    >
-                      Bearbeiten
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+    <div className="profile-page">
+      {/* Hero */}
+      <div className="profile-hero">
+        <div className="profile-avatar-wrap">
+          <div className="profile-avatar-circle">
+            {avatarUrl
+              ? <img src={avatarUrl} alt={displayName} />
+              : avatarLetter}
           </div>
-
-          {error && (
-            <div className="auth-error" style={{ marginTop: '12px' }}>
-              <span>❌</span>
-              <span>{error}</span>
-            </div>
-          )}
-          {success && (
-            <div className="auth-success" style={{ marginTop: '12px' }}>
-              <span>✅</span>
-              <span>{success}</span>
-            </div>
-          )}
-        </section>
-
-        {/* Stats Card */}
-        <section className="card profile-stats-card">
-          <h3>Deine Statistiken</h3>
-          <div className="profile-stats-grid">
-            <div className="profile-stat-item">
-              <div className="profile-stat-icon xp">⭐</div>
-              <div className="profile-stat-info">
-                <span className="profile-stat-value">{progress.points}</span>
-                <span className="profile-stat-label">XP gesamt</span>
-              </div>
-            </div>
-
-            <div className="profile-stat-item">
-              <div className="profile-stat-icon streak">🔥</div>
-              <div className="profile-stat-info">
-                <span className="profile-stat-value">{progress.streak}</span>
-                <span className="profile-stat-label">Tage Streak</span>
-              </div>
-            </div>
-
-            <div className="profile-stat-item">
-              <div className="profile-stat-icon hearts">❤️</div>
-              <div className="profile-stat-info">
-                <span className="profile-stat-value">{progress.hearts}/5</span>
-                <span className="profile-stat-label">Herzen</span>
-              </div>
-            </div>
-
-            <div className="profile-stat-item">
-              <div className="profile-stat-icon level">🏅</div>
-              <div className="profile-stat-info">
-                <span className="profile-stat-value">Level {levelInfo.level}</span>
-                <span className="profile-stat-label">
-                  {levelInfo.currentXp}/{levelInfo.nextLevelXp} XP
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Achievements Card */}
-        <section className="card profile-achievements-card">
-          <h3>Erfolge</h3>
-          <div className="achievements-grid">
-            {allAchievements.map((achievement) => {
-              const isUnlocked = achievements.includes(achievement.id)
-              return (
-                <div
-                  key={achievement.id}
-                  className={`achievement-item ${isUnlocked ? 'unlocked' : 'locked'}`}
-                >
-                  <div className="achievement-icon">{achievement.icon}</div>
-                  <div className="achievement-info">
-                    <span className="achievement-name">{achievement.name}</span>
-                    <span className="achievement-desc">{achievement.description}</span>
-                  </div>
-                  {isUnlocked && <span className="achievement-check">✓</span>}
-                </div>
-              )
-            })}
-          </div>
-        </section>
-
-        {/* Account Settings Card */}
-        <section className="card profile-settings-card">
-          <h3>Kontoeinstellungen</h3>
-
-          {isOnlineMode && (
+          {user && isOnlineMode && (
             <>
-              {!showPasswordChange ? (
-                <button
-                  className="cta ghost profile-settings-btn"
-                  onClick={() => setShowPasswordChange(true)}
-                >
-                  🔒 Passwort aendern
-                </button>
-              ) : (
-                <div className="password-change-form">
-                  <label className="field">
-                    <span>Neues Passwort</span>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="••••••••"
-                      minLength={6}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Bestaetigen</span>
-                    <input
-                      type="password"
-                      value={confirmNewPassword}
-                      onChange={(e) => setConfirmNewPassword(e.target.value)}
-                      placeholder="••••••••"
-                      minLength={6}
-                    />
-                  </label>
-                  <div className="password-change-actions">
-                    <button
-                      className="cta small primary"
-                      onClick={handlePasswordChange}
-                      disabled={loading}
-                    >
-                      Speichern
-                    </button>
-                    <button
-                      className="cta small ghost"
-                      onClick={() => {
-                        setShowPasswordChange(false)
-                        setNewPassword('')
-                        setConfirmNewPassword('')
-                      }}
-                    >
-                      Abbrechen
-                    </button>
-                  </div>
-                </div>
-              )}
+              <button
+                className="profile-avatar-edit"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Avatar ändern"
+              >✏️</button>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
             </>
           )}
+        </div>
 
-          <button className="cta ghost profile-settings-btn logout-btn" onClick={handleLogout}>
-            🚪 Abmelden
-          </button>
+        {editingName ? (
+          <div className="inline-edit" style={{ justifyContent: 'center', marginBottom: 8 }}>
+            <input
+              className="inline-input"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              autoFocus
+              style={{ maxWidth: 200, textAlign: 'center' }}
+            />
+            <button className="inline-btn save" onClick={handleSaveName} disabled={saving}>✓</button>
+            <button className="inline-btn cancel" onClick={() => setEditingName(false)}>✕</button>
+          </div>
+        ) : (
+          <div
+            className="profile-username"
+            onClick={() => user && setEditingName(true)}
+            style={{ cursor: user ? 'pointer' : 'default' }}
+          >
+            {displayName} {user && <span style={{ fontSize: 16 }}>✏️</span>}
+          </div>
+        )}
 
-          {!isOnlineMode && (
-            <p className="offline-notice">
-              Du bist im Offline-Modus. Melde dich an, um deine Daten zu synchronisieren.
-            </p>
+        {user && <div className="profile-useremail">{user.email}</div>}
+
+        <div className="profile-league-badge">
+          <span>{league.emoji}</span>
+          <span>{league.name}-Liga</span>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="profile-content">
+        {/* Stats */}
+        <div className="section-hdr">Statistiken</div>
+        <div className="stats-cards">
+          <div className="stat-card">
+            <div className="stat-card-icon">⭐</div>
+            <div>
+              <div className="stat-card-val">{progress.points}</div>
+              <div className="stat-card-lbl">XP gesamt</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon">🔥</div>
+            <div>
+              <div className="stat-card-val">{progress.streak}</div>
+              <div className="stat-card-lbl">Tage-Streak</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon">❤️</div>
+            <div>
+              <div className="stat-card-val">{progress.hearts}/{MAX_HEARTS}</div>
+              <div className="stat-card-lbl">Herzen</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon">🎓</div>
+            <div>
+              <div className="stat-card-val">Lv. {level}</div>
+              <div className="stat-card-lbl">Level</div>
+            </div>
+          </div>
+          <div className="stat-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="stat-card-icon">📚</div>
+            <div>
+              <div className="stat-card-val">{completedCount} / 30</div>
+              <div className="stat-card-lbl">Lektionen abgeschlossen</div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ height: 10, background: 'var(--border)', borderRadius: 5, overflow: 'hidden', marginLeft: 8 }}>
+                <div style={{ height: '100%', width: `${(completedCount / 30) * 100}%`, background: 'var(--success)', borderRadius: 5, transition: 'width 0.6s ease' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Achievements */}
+        <div className="section-hdr">Abzeichen</div>
+        <div className="achievements-grid">
+          {Object.values(ACHIEVEMENTS).map(ach => {
+            const earned = earnedBadges.has(ach.id)
+            return (
+              <div key={ach.id} className={`ach-card${earned ? ' earned' : ' locked'}`}>
+                <div className="ach-emoji">{ach.icon}</div>
+                <div>
+                  <div className="ach-name">{ach.name}</div>
+                  <div className="ach-desc">{ach.description}</div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Menu */}
+        <div className="section-hdr">Einstellungen</div>
+        <div className="menu-list">
+          {!user ? (
+            <button className="menu-item" onClick={onShowAuth}>
+              <span className="menu-icon">🔑</span>
+              <span className="menu-text">Einloggen / Registrieren</span>
+              <span className="menu-arrow">›</span>
+            </button>
+          ) : (
+            <>
+              <button className="menu-item" onClick={() => setEditingName(true)}>
+                <span className="menu-icon">✏️</span>
+                <span className="menu-text">Name ändern</span>
+                <span className="menu-arrow">›</span>
+              </button>
+              <button className="menu-item danger" onClick={handleLogout}>
+                <span className="menu-icon">🚪</span>
+                <span className="menu-text">Ausloggen</span>
+                <span className="menu-arrow">›</span>
+              </button>
+            </>
           )}
-        </section>
+        </div>
+
+        {!user && (
+          <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>
+            Erstelle ein Konto um deinen Fortschritt zu speichern!
+          </div>
+        )}
       </div>
     </div>
   )
