@@ -39,7 +39,10 @@ CREATE TABLE IF NOT EXISTS user_progress (
   streak INTEGER DEFAULT 0,
   hearts INTEGER DEFAULT 5,
   badges TEXT[] DEFAULT '{}',
+  coins INTEGER DEFAULT 0,
   last_active DATE,
+  completed_lessons TEXT[] DEFAULT '{}',
+  claimed_missions TEXT[] DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id)

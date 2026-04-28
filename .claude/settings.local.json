@@ -22,7 +22,9 @@
       "Bash(curl -v \"https://rhfukvwijcgsrmbprppa.supabase.co/rest/v1/\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://rhfukvwijcgsrmbprppa.supabase.co/rest/v1/\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://rhfukvwijcgsrmbprppa.supabase.co/auth/v1/settings\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -w '\\\\nHTTP:%{http_code}' 'https://rhfukvwijcgsrmbprppa.supabase.co/auth/v1/token?grant_type=refresh_token' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoZnVrdndpamNnc3JtYnBycHBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MjY1NTUsImV4cCI6MjA5MDAwMjU1NX0.wUDL6eO1m6vgQrnPlzO-s8yNVE4Ie0RZYdjVMp-tsTM' -H 'Content-Type: application/json' -d '{\"refresh_token\":\"invalid\"}')"
     ]
   }
 }
