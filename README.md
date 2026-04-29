@@ -1,47 +1,101 @@
-# SaluLearn (Easy Guide)
+# SaluLearn
 
-## 🔧 What this project is
+A modern, gamified learning platform built with React, TypeScript, and Supabase. SaluLearn provides an interactive dashboard for tracking course progress, managing daily missions, and personalizing the learning experience.
 
-SaluLearn is a React + TypeScript + Vite app with Supabase auth and progress tracking. This is the main UI for your learning dashboard.
+## Tech Stack
 
-## 🗂️ Where to find things
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, TypeScript, Vite |
+| Styling | Tailwind CSS, Framer Motion |
+| State Management | Zustand |
+| Backend / Auth | Supabase |
+| Routing | React Router v7 |
+| Deployment | Vercel |
 
-- `src/main.tsx` - App bootstrap, sets up React + router + global CSS.
-- `src/App.tsx` - Main screen layout, sidebar/top bar/right rail and routes.
-- `src/pages/` - Pages for each route (home, learn, profile, lesson, login).
-- `src/components/` - Shared reusable UI pieces.
-- `src/contexts/AuthContext.tsx` - Login/session state + user profile.
-- `src/services/` - progress logic, sync, local storage.
+## Project Structure
 
-## ✨ How to change the app (non-developer steps)
+```
+src/
+├── main.tsx              # App entry point — React + router setup
+├── App.tsx               # Root layout: sidebar, top bar, route definitions
+├── pages/                # One file per route (Home, Learn, Lesson, Profile, Login)
+├── components/           # Reusable UI components
+├── contexts/
+│   └── AuthContext.tsx   # Authentication state and user profile
+├── services/             # Progress logic, sync, local storage
+├── data/                 # Static course/mission data
+└── lib/                  # Supabase client and utility helpers
+```
 
-1. Open `src/App.tsx`.
-2. Find the first big comment section with headings:
-   - `// TODO: ...` markers show where to update content.
-3. To add a new page: create file in `src/pages/MyPage.tsx`, then add route in `App.tsx` inside `<Routes>`.
+## Getting Started
 
-## 🧹 Rebuild & redeploy
+### Prerequisites
 
-- `npm install`
-- `npm run build`
-- `npm run dev`
-- `npx vercel --prod`
+- Node.js 18+
+- A [Supabase](https://supabase.com) project with the schema from `supabase/schema.sql`
 
-## 🗑️ Clean unnecessary files (safe cleanup)
+### Installation
 
-- `rm -rf node_modules dist .turbo .cache` (optional)
-- `git clean -fd` (if you know these are unwanted)
+```bash
+git clone https://github.com/your-org/salulearn.git
+cd salulearn
+npm install
+```
 
-## 🧠 FAQ
+### Environment Variables
 
-- If build fails with TypeScript `TS6133` (unused variable), open the file and remove the unused variable from the `const` assignment.
-- If deployment fails on Vercel, run `npx vercel inspect <deployment-id> --logs` and share the error.
+Create a `.env.local` file in the project root:
 
----
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-## 🛠️ Specific areas to edit in `src/App.tsx`
+### Development
 
-- `const dailyMissions` for mission text & targets.
-- `const defaultProgress` for starting points/coins/hearts.
-- `Routes` block for pages and navigation.
-- `Sidebar` links for menu items.
+```bash
+npm run dev
+```
+
+### Production Build
+
+```bash
+npm run build
+npm run preview   # optional local preview
+```
+
+### Deploy to Vercel
+
+```bash
+npx vercel --prod
+```
+
+## Key Configuration Points
+
+| File | Purpose |
+|---|---|
+| `src/App.tsx` — `dailyMissions` | Edit mission text and completion targets |
+| `src/App.tsx` — `defaultProgress` | Set initial coins, hearts, and XP values |
+| `src/App.tsx` — `<Routes>` | Add or remove application routes |
+
+## Troubleshooting
+
+**TypeScript error `TS6133` (unused variable)**
+Remove the unused variable from the `const` assignment in the indicated file.
+
+**Vercel deployment failure**
+Inspect the deployment logs:
+```bash
+npx vercel inspect <deployment-id> --logs
+```
+
+## Contributing
+
+1. Create a feature branch from `main`
+2. Make your changes and run `npm run build` to verify there are no errors
+3. Open a pull request with a clear description of the change
+
+## License
+
+Private — all rights reserved.
