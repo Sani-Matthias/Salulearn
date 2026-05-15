@@ -118,6 +118,15 @@ function checkBadges(p: ProgressState): string[] {
   return Array.from(badges)
 }
 
+export function addTrainingXp(prev: ProgressState, xp: number): ProgressState {
+  if (xp <= 0) return prev
+  const points = prev.points + xp
+  const coins = prev.coins + Math.floor(xp / 5)
+  const next = { ...prev, points, coins, badges: checkBadges({ ...prev, points }) }
+  saveLocalProgress(next)
+  return next
+}
+
 export function loseHeart(prev: ProgressState): ProgressState {
   const hearts = Math.max(0, prev.hearts - 1)
   const next = { ...prev, hearts }

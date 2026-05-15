@@ -9,10 +9,12 @@ import {
   calculateStreak,
   saveCloudProgress,
   syncProgress,
+  completeLesson,
+  addTrainingXp,
 } from './services/progressService'
-import { completeLesson } from './services/progressService'
 import HomePage from './pages/HomePage'
 import LessonPage from './pages/LessonPage'
+import TrainingPage from './pages/TrainingPage'
 import ProfilePage from './pages/ProfilePage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import AuthModal from './components/AuthModal'
@@ -22,7 +24,7 @@ const getLocalToday = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-type Tab = 'home' | 'leaderboard' | 'profile'
+type Tab = 'home' | 'training' | 'leaderboard' | 'profile'
 
 function AppContent() {
   const { user, profile, isOnlineMode } = useAuth()
@@ -32,10 +34,11 @@ function AppContent() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const isLessonPage = location.pathname.startsWith('/lesson/')
+  const isLessonPage = location.pathname.startsWith('/lesson/') || location.pathname.startsWith('/training')
 
   const activeTab: Tab =
     location.pathname.startsWith('/leaderboard') ? 'leaderboard' :
+    location.pathname.startsWith('/training')    ? 'training'    :
     location.pathname.startsWith('/profile')     ? 'profile'     :
     'home'
 
@@ -79,8 +82,17 @@ function AppContent() {
     })
   }
 
+  const handleTrainingXp = (xp: number) => {
+    setProgress(prev => {
+      const next = addTrainingXp(prev, xp)
+      if (user && isOnlineMode) saveCloudProgress(user.id, next)
+      return next
+    })
+  }
+
   const navTo = (tab: Tab) => {
     if (tab === 'home') navigate('/')
+    else if (tab === 'training') navigate('/training')
     else if (tab === 'leaderboard') navigate('/leaderboard')
     else navigate('/profile')
   }
@@ -137,6 +149,7 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<HomePage progress={progress} onStartLesson={id => navigate(`/lesson/${id}`)} />} />
         <Route path="/lesson/:lessonId" element={<LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} />} />
+        <Route path="/training" element={<TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} />} />
         <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
         <Route path="/profile" element={<ProfilePage progress={progress} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
       </Routes>
@@ -147,6 +160,10 @@ function AppContent() {
           <button className={`nav-btn${activeTab === 'home' ? ' active' : ''}`} onClick={() => navTo('home')}>
             <span className="nav-icon">🏠</span>
             <span className="nav-label">Lernen</span>
+          </button>
+          <button className={`nav-btn${activeTab === 'training' ? ' active' : ''}`} onClick={() => navTo('training')}>
+            <span className="nav-icon">🎯</span>
+            <span className="nav-label">Training</span>
           </button>
           <button className={`nav-btn${activeTab === 'leaderboard' ? ' active' : ''}`} onClick={() => navTo('leaderboard')}>
             <span className="nav-icon">🏆</span>
