@@ -16,7 +16,14 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
   const [editingName, setEditingName] = useState(false)
   const [newName, setNewName] = useState(profile?.display_name || '')
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const showToast = (msg: string, ok: boolean) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   const level = calculateLevel(progress.points)
   const league = getLeague(progress.points)
@@ -30,20 +37,53 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
   const handleSaveName = async () => {
     if (!newName.trim()) return
     setSaving(true)
-    await updateProfile({ display_name: newName.trim() })
-    setEditingName(false)
+    const { error } = await updateProfile({ display_name: newName.trim() })
     setSaving(false)
+    if (error) {
+      showToast(`Fehler: ${error}`, false)
+    } else {
+      setEditingName(false)
+      showToast('Name erfolgreich geändert!', true)
+    }
   }
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0] || !supabase || !user) return
     const file = e.target.files[0]
-    const ext = file.name.split('.').pop()
+
+    if (file.size > 3 * 1024 * 1024) {
+      showToast('Bild zu groß – maximal 3 MB erlaubt.', false)
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      showToast('Nur Bilddateien erlaubt (JPG, PNG, etc.)', false)
+      return
+    }
+
+    setUploading(true)
+    const ext = file.name.split('.').pop() ?? 'jpg'
     const path = `${user.id}/avatar.${ext}`
-    const { error: uploadErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (!uploadErr) {
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-      await updateProfile({ avatar_url: data.publicUrl + '?t=' + Date.now() })
+
+    const { error: uploadErr } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true })
+
+    if (uploadErr) {
+      setUploading(false)
+      showToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false)
+      return
+    }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+    const { error: profileErr } = await updateProfile({
+      avatar_url: data.publicUrl + '?t=' + Date.now(),
+    })
+
+    setUploading(false)
+    if (profileErr) {
+      showToast(`Profilbild konnte nicht gespeichert werden: ${profileErr}`, false)
+    } else {
+      showToast('Profilbild erfolgreich aktualisiert!', true)
     }
   }
 
@@ -54,6 +94,20 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
 
   return (
     <div className="profile-page">
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 72, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: toast.ok ? '#58CC02' : '#FF4B4B',
+          color: '#fff', borderRadius: 16, padding: '12px 20px',
+          fontSize: 14, fontWeight: 700, boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+          maxWidth: 'calc(100% - 48px)', textAlign: 'center',
+          animation: 'slide-up 0.3s ease',
+        }}>
+          {toast.ok ? '✅ ' : '❌ '}{toast.msg}
+        </div>
+      )}
+
       {/* Hero */}
       <div className="profile-hero">
         <div className="profile-avatar-wrap">
@@ -66,9 +120,10 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
             <>
               <button
                 className="profile-avatar-edit"
-                onClick={() => fileRef.current?.click()}
+                onClick={() => !uploading && fileRef.current?.click()}
                 aria-label="Avatar ändern"
-              >✏️</button>
+                style={{ opacity: uploading ? 0.6 : 1 }}
+              >{uploading ? '⏳' : '✏️'}</button>
               <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
             </>
           )}

@@ -134,3 +134,40 @@ CREATE TRIGGER update_user_progress_updated_at
 CREATE INDEX IF NOT EXISTS idx_user_progress_user_id ON user_progress(user_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_type ON achievements(achievement_type);
+
+-- ============================================
+-- STORAGE: AVATARS BUCKET
+-- ============================================
+-- Creates the public avatars bucket (run this if avatar upload fails)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Allow anyone to read avatar images (public bucket)
+DROP POLICY IF EXISTS "Avatars are publicly accessible" ON storage.objects;
+CREATE POLICY "Avatars are publicly accessible" ON storage.objects
+  FOR SELECT USING (bucket_id = 'avatars');
+
+-- Allow logged-in users to upload into their own folder
+DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
+CREATE POLICY "Users can upload own avatar" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- Allow users to update/replace their own avatar
+DROP POLICY IF EXISTS "Users can update own avatar" ON storage.objects;
+CREATE POLICY "Users can update own avatar" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- Allow users to delete their own avatar
+DROP POLICY IF EXISTS "Users can delete own avatar" ON storage.objects;
+CREATE POLICY "Users can delete own avatar" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
