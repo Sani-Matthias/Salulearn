@@ -17,6 +17,7 @@ import LessonPage from './pages/LessonPage'
 import TrainingPage from './pages/TrainingPage'
 import ProfilePage from './pages/ProfilePage'
 import LeaderboardPage from './pages/LeaderboardPage'
+import BlogPage from './pages/BlogPage'
 import AuthModal from './components/AuthModal'
 
 const getLocalToday = () => {
@@ -34,7 +35,7 @@ function AppContent() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const isLessonPage = location.pathname.startsWith('/lesson/') || location.pathname.startsWith('/training')
+  const isLessonPage = location.pathname.startsWith('/lesson/') || location.pathname.startsWith('/training') || location.pathname.startsWith('/blog')
 
   const activeTab: Tab =
     location.pathname.startsWith('/leaderboard') ? 'leaderboard' :
@@ -106,6 +107,14 @@ function AppContent() {
       {/* Top bar – hidden during lessons */}
       {!isLessonPage && (
         <div className="top-bar">
+          <button
+            className="blog-icon-btn"
+            onClick={() => navigate('/blog')}
+            aria-label="Blog"
+            title="Salulearn Blog"
+          >
+            📰
+          </button>
           <img src="/logo.png" alt="SaluLearn" className="logo-mark" />
 
           <div className="stat-pill streak">
@@ -152,6 +161,7 @@ function AppContent() {
         <Route path="/training" element={<TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} />} />
         <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
         <Route path="/profile" element={<ProfilePage progress={progress} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
+        <Route path="/blog" element={<BlogPage />} />
       </Routes>
 
       {/* Bottom nav – hidden during lessons */}
