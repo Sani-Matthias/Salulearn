@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "SaluLearn",
   "short_name": "SaluLearn",
   "description": "The Duolingo for Lifesavers",
@@ -30,5 +31,20 @@
     }
   ],
   "categories": ["education", "health"],
-  "screenshots": []
+  "screenshots": [
+    {
+      "src": "/screenshots/screenshot-1.jpg",
+      "sizes": "1002x2108",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "SaluLearn – Startseite"
+    },
+    {
+      "src": "/screenshots/screenshot-2.jpg",
+      "sizes": "1080x2205",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "SaluLearn – Lernpfad"
+    }
+  ]
 }
