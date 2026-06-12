@@ -1,142 +1,270 @@
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import type { ProgressState } from '../services/progressService'
-import { getLeague, calculateLevel } from '../services/progressService'
+import {
+  LIGA_INFO,
+  LIGA_TIERS,
+  PROMOTION_CUTOFF,
+  STAY_CUTOFF,
+  getZone,
+  getNextTier,
+  getPrevTier,
+  formatTimeLeft,
+  getOrJoinLeague,
+  fetchLeagueLeaderboard,
+  checkAndProcessSeason,
+} from '../services/leagueService'
+import type { LeaderboardEntry, LeagueStatus, SeasonResult, LigaTier } from '../services/leagueService'
 
 type Props = { progress: ProgressState }
 
-// Simulated leaderboard data
-const mockPlayers = [
-  { name: 'SaraS', xp: 4200, avatar: '👩‍🏫' },
-  { name: 'MaxM', xp: 3850, avatar: '🧑‍🚒' },
-  { name: 'LisaK', xp: 3100, avatar: '👩‍⚕️' },
-  { name: 'TomH', xp: 2750, avatar: '🧑‍🎓' },
-  { name: 'AnnaB', xp: 2400, avatar: '👩' },
-  { name: 'KarlF', xp: 2100, avatar: '👨' },
-  { name: 'MiaW', xp: 1800, avatar: '🧑' },
-  { name: 'BenJ', xp: 1500, avatar: '👦' },
-  { name: 'LeoP', xp: 1200, avatar: '🧒' },
+// Demo data for logged-out users
+const DEMO_PLAYERS: LeaderboardEntry[] = [
+  { user_id: '1', display_name: 'SaraS',   avatar_url: null, weekly_xp: 420, position: 1 },
+  { user_id: '2', display_name: 'MaxM',    avatar_url: null, weekly_xp: 385, position: 2 },
+  { user_id: '3', display_name: 'LisaK',   avatar_url: null, weekly_xp: 310, position: 3 },
+  { user_id: '4', display_name: 'TomH',    avatar_url: null, weekly_xp: 275, position: 4 },
+  { user_id: '5', display_name: 'AnnaB',   avatar_url: null, weekly_xp: 240, position: 5 },
+  { user_id: '6', display_name: 'KarlF',   avatar_url: null, weekly_xp: 210, position: 6 },
+  { user_id: '7', display_name: 'MiaW',    avatar_url: null, weekly_xp: 180, position: 7 },
+  { user_id: '8', display_name: 'BenJ',    avatar_url: null, weekly_xp: 150, position: 8 },
+  { user_id: '9', display_name: 'LeoP',    avatar_url: null, weekly_xp: 120, position: 9 },
+  { user_id: '10', display_name: 'EvaR',   avatar_url: null, weekly_xp: 90,  position: 10 },
+  { user_id: '11', display_name: 'JanS',   avatar_url: null, weekly_xp: 75,  position: 11 },
+  { user_id: '12', display_name: 'PetraM', avatar_url: null, weekly_xp: 60,  position: 12 },
+  { user_id: '13', display_name: 'OliK',   avatar_url: null, weekly_xp: 45,  position: 13 },
+  { user_id: '14', display_name: 'MarcL',  avatar_url: null, weekly_xp: 30,  position: 14 },
+  { user_id: '15', display_name: 'NinaF',  avatar_url: null, weekly_xp: 20,  position: 15 },
 ]
 
-const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+const AVATARS = ['🧑', '👩', '👨', '🧒', '👦', '👧', '🧑‍🎓', '👩‍🏫', '🧑‍🚒', '👩‍⚕️']
+const getAvatar = (entry: LeaderboardEntry, idx: number) =>
+  entry.avatar_url ? null : AVATARS[idx % AVATARS.length]
+
+function SeasonBanner({ result, newTier }: { result: SeasonResult['result']; newTier?: LigaTier }) {
+  if (!result) return null
+  const info = newTier ? LIGA_INFO[newTier] : null
+  const configs = {
+    promoted:  { bg: '#D4EDDA', color: '#155724', icon: '⬆️', text: `Aufgestiegen in die ${info?.name}-Liga!` },
+    relegated: { bg: '#F8D7DA', color: '#721C24', icon: '⬇️', text: `Abgestiegen in die ${info?.name}-Liga.` },
+    stayed:    { bg: '#FFF3CD', color: '#856404', icon: '➡️', text: 'Saison beendet – gleiche Liga.' },
+  }
+  const cfg = configs[result]
+  return (
+    <div style={{
+      background: cfg.bg, color: cfg.color,
+      borderRadius: 14, padding: '12px 16px',
+      fontWeight: 700, fontSize: 14,
+      display: 'flex', alignItems: 'center', gap: 8,
+      marginBottom: 12,
+    }}>
+      <span style={{ fontSize: 20 }}>{cfg.icon}</span>
+      {cfg.text}
+    </div>
+  )
+}
+
+function ZoneDivider({ label, icon, color }: { label: string; icon: string; color: string }) {
+  return (
+    <div className="lb-zone-divider" style={{ color }}>
+      <span>{icon}</span>
+      <span>{label}</span>
+      <span>{icon}</span>
+    </div>
+  )
+}
 
 export default function LeaderboardPage({ progress }: Props) {
-  const { profile, user } = useAuth()
-  const myXp = progress.points
-  const myName = profile?.display_name || user?.email?.split('@')[0] || 'Du'
-  const league = getLeague(myXp)
-  const level = calculateLevel(myXp)
+  const { user, isOnlineMode } = useAuth()
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<LeagueStatus | null>(null)
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([])
+  const [seasonResult, setSeasonResult] = useState<SeasonResult | null>(null)
+  const [timeLeft, setTimeLeft] = useState('')
 
-  const allPlayers = [
-    ...mockPlayers,
-    { name: myName, xp: myXp, avatar: '😊', isMe: true },
-  ].sort((a, b) => b.xp - a.xp)
+  const loadLeague = useCallback(async () => {
+    if (!user || !isOnlineMode) return
+    setLoading(true)
+    try {
+      // 1. Process season end if it has passed
+      const result = await checkAndProcessSeason(user.id)
+      if (result?.processed) setSeasonResult(result)
 
-  const myRank = allPlayers.findIndex(p => (p as { isMe?: boolean }).isMe) + 1
+      // 2. Ensure user is in a group (creates one if needed)
+      const st = await getOrJoinLeague(user.id)
+      setStatus(st)
 
-  const leagueGradients: Record<string, string> = {
-    'Diamant': 'linear-gradient(135deg, #1CB0F6 0%, #0090D4 100%)',
-    'Gold':    'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-    'Silber':  'linear-gradient(135deg, #C0C0C0 0%, #888888 100%)',
-    'Bronze':  'linear-gradient(135deg, #CD7F32 0%, #A0522D 100%)',
-    'Anfänger':'linear-gradient(135deg, #58CC02 0%, #46A302 100%)',
+      // 3. Fetch leaderboard
+      if (st?.group_id) {
+        const lb = await fetchLeagueLeaderboard(st.group_id)
+        setEntries(lb)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [user, isOnlineMode])
+
+  useEffect(() => {
+    loadLeague()
+  }, [loadLeague])
+
+  // Countdown timer
+  useEffect(() => {
+    if (!status?.season_end) return
+    const update = () => setTimeLeft(formatTimeLeft(status.season_end))
+    update()
+    const id = setInterval(update, 30000)
+    return () => clearInterval(id)
+  }, [status?.season_end])
+
+  const isLoggedIn = !!user
+  const isOnline = isLoggedIn && isOnlineMode
+
+  // Decide what to display
+  const displayEntries: (LeaderboardEntry & { isMe?: boolean })[] = isOnline
+    ? entries.map(e => ({ ...e, isMe: e.user_id === user?.id }))
+    : DEMO_PLAYERS
+
+  const currentTier: LigaTier = (status?.tier ?? 'bronze') as LigaTier
+  const ligaInfo = LIGA_INFO[currentTier]
+  const myEntry = displayEntries.find(e => e.isMe)
+  const myRank = myEntry ? myEntry.position : null
+  const myWeeklyXp = isOnline ? (status?.weekly_xp ?? 0) : progress.points
+
+  const nextTier = getNextTier(currentTier)
+  const prevTier = getPrevTier(currentTier)
+
+  // Group entries by zone
+  const promotionEntries = displayEntries.filter(e => e.position <= PROMOTION_CUTOFF)
+  const stayEntries = displayEntries.filter(e => e.position > PROMOTION_CUTOFF && e.position <= STAY_CUTOFF)
+  const relegationEntries = displayEntries.filter(e => e.position > STAY_CUTOFF)
+
+  const renderEntry = (e: typeof displayEntries[0], idx: number) => {
+    const rank = e.position
+    const isMe = e.isMe
+    const zone = getZone(rank)
+    const avatar = getAvatar(e, idx)
+    return (
+      <div
+        key={e.user_id}
+        className={`lb-item${isMe ? ' me' : ''} lb-zone-${zone}`}
+      >
+        <div className={`lb-rank${rank <= 3 ? ` r${rank}` : ''}`}>
+          {MEDAL[rank] ?? rank}
+        </div>
+        <div className="lb-avatar">
+          {e.avatar_url
+            ? <img src={e.avatar_url} alt="" />
+            : avatar}
+        </div>
+        <div className="lb-name">
+          {e.display_name}
+          {isMe && <span className="lb-me-badge">Du</span>}
+        </div>
+        <div className="lb-xp">{e.weekly_xp} XP</div>
+      </div>
+    )
   }
 
   return (
     <div className="leaderboard-page">
       <div className="lb-hero">
         <div className="lb-title">Rangliste 🏆</div>
-        <div className="lb-subtitle">Wöchentliche XP-Wertung</div>
+        <div className="lb-subtitle">Wöchentliche Liga</div>
       </div>
 
-      {/* League card */}
-      <div
-        className="league-card"
-        style={{ background: leagueGradients[league.name] || leagueGradients['Anfänger'] }}
-      >
-        <div className="league-icon-xl">{league.emoji}</div>
-        <div>
-          <div className="league-card-name">{league.name}-Liga</div>
+      {/* Season result banner (shown once after season processed) */}
+      {seasonResult?.processed && (
+        <SeasonBanner result={seasonResult.result} newTier={seasonResult.new_tier} />
+      )}
+
+      {/* League tier card */}
+      <div className="league-card" style={{ background: ligaInfo.gradient }}>
+        <div className="league-icon-xl">{ligaInfo.emoji}</div>
+        <div style={{ flex: 1 }}>
+          <div className="league-card-name">{ligaInfo.name}-Liga</div>
           <div className="league-card-desc">
-            Du bist auf Platz {myRank} • Level {level} • {myXp} XP
+            {myRank ? `Platz ${myRank} • ` : ''}{myWeeklyXp} XP diese Woche
           </div>
+          {timeLeft && (
+            <div className="league-card-desc" style={{ marginTop: 2 }}>
+              ⏳ Saison endet in {timeLeft}
+            </div>
+          )}
+        </div>
+        {/* Liga tier indicator */}
+        <div className="lb-tier-ladder">
+          {[...LIGA_TIERS].reverse().map(t => (
+            <div
+              key={t}
+              className="lb-tier-dot"
+              style={{
+                background: t === currentTier ? 'white' : 'rgba(255,255,255,0.3)',
+                transform: t === currentTier ? 'scale(1.4)' : 'scale(1)',
+              }}
+              title={LIGA_INFO[t].name}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Top 3 podium */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-end',
-        gap: 8,
-        margin: '16px 0 20px',
-        padding: '0 8px',
-      }}>
-        {[allPlayers[1], allPlayers[0], allPlayers[2]].filter(Boolean).map((p, i) => {
-          const rank = [2, 1, 3][i]
-          const heights = [80, 110, 60]
-          const isMe = (p as { isMe?: boolean }).isMe
-          return (
-            <div key={p.name} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <div style={{ fontSize: rank === 1 ? 32 : 24 }}>{(p as { avatar: string }).avatar}</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: isMe ? 'var(--success-dark)' : 'var(--text)', textAlign: 'center' }}>
-                {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--info)' }}>{p.xp} XP</div>
-              <div style={{
-                width: '100%',
-                height: heights[i],
-                borderRadius: '12px 12px 0 0',
-                background: rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : '#CD7F32',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 28,
-                fontWeight: 900,
-                color: 'white',
-              }}>
-                {RANK_MEDAL[rank] || rank}
-              </div>
-            </div>
-          )
-        })}
+      {/* Promotion/relegation info */}
+      <div className="lb-zone-legend">
+        {nextTier && (
+          <div className="lb-zone-legend-item promotion">
+            ⬆️ Top 10 → {LIGA_INFO[nextTier].name}
+          </div>
+        )}
+        <div className="lb-zone-legend-item stay">
+          ➡️ Platz 11–20 bleibt
+        </div>
+        {prevTier && (
+          <div className="lb-zone-legend-item relegation">
+            ⬇️ Platz 21–30 → {LIGA_INFO[prevTier].name}
+          </div>
+        )}
       </div>
 
-      {/* Full list */}
-      <div className="lb-list">
-        {allPlayers.map((p, idx) => {
-          const rank = idx + 1
-          const isMe = (p as { isMe?: boolean }).isMe
-          const rankClass = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : ''
-          return (
-            <div key={p.name + rank} className={`lb-item${isMe ? ' me' : ''}`}>
-              <div className={`lb-rank ${rankClass}`}>
-                {RANK_MEDAL[rank] || rank}
-              </div>
-              <div className="lb-avatar">
-                {(p as { avatar: string }).avatar}
-              </div>
-              <div className="lb-name">
-                {p.name} {isMe && '(Du)'}
-              </div>
-              <div className="lb-xp">{p.xp} XP</div>
-            </div>
-          )
-        })}
-      </div>
+      {/* Loading skeleton */}
+      {loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="lb-skeleton" />
+          ))}
+        </div>
+      )}
 
-      {!user && (
-        <div style={{
-          margin: '20px 0',
-          padding: '16px',
-          background: 'var(--surface)',
-          borderRadius: 16,
-          textAlign: 'center',
-          fontSize: 14,
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          lineHeight: 1.6,
-        }}>
-          💡 Erstelle ein Konto, um in der echten Rangliste zu erscheinen und mit anderen zu konkurrieren!
+      {/* Leaderboard with zones */}
+      {!loading && (
+        <div className="lb-list">
+          {promotionEntries.length > 0 && (
+            <>
+              <ZoneDivider label="Aufstieg" icon="⬆️" color="#28a745" />
+              {promotionEntries.map((e, i) => renderEntry(e, i))}
+            </>
+          )}
+          {stayEntries.length > 0 && (
+            <>
+              <ZoneDivider label="Bleibt" icon="➡️" color="#6c757d" />
+              {stayEntries.map((e, i) => renderEntry(e, promotionEntries.length + i))}
+            </>
+          )}
+          {relegationEntries.length > 0 && (
+            <>
+              <ZoneDivider label="Abstieg" icon="⬇️" color="#dc3545" />
+              {relegationEntries.map((e, i) => renderEntry(e, promotionEntries.length + stayEntries.length + i))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Offline / not logged in notice */}
+      {!isOnline && (
+        <div className="lb-offline-notice">
+          {!isLoggedIn
+            ? '💡 Erstelle ein Konto, um in einer echten Liga zu konkurrieren!'
+            : '📡 Offline – Liga nicht verfügbar.'}
         </div>
       )}
 

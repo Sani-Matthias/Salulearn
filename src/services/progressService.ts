@@ -11,6 +11,7 @@ export type ProgressState = {
   lastActive: string | null // YYYY-MM-DD
   completedLessons: string[]
   claimedMissions: string[]
+  lastHeartRegenAt: string | null // ISO timestamp when regen cycle started; null when hearts are full
 }
 
 export const MAX_HEARTS = 5
@@ -33,6 +34,7 @@ export function getDefaultProgress(): ProgressState {
     lastActive: null,
     completedLessons: [],
     claimedMissions: [],
+    lastHeartRegenAt: null,
   }
 }
 
@@ -83,6 +85,9 @@ export function completeLesson(
   const completion = completedLessons.length / totalLessons
   const points = prev.points + xpReward
   const hearts = Math.max(0, Math.min(MAX_HEARTS, prev.hearts - heartsLost))
+  const lastHeartRegenAt = hearts < MAX_HEARTS && !prev.lastHeartRegenAt
+    ? new Date().toISOString()
+    : prev.lastHeartRegenAt
   const coins = prev.coins + Math.floor(xpReward / 5)
 
   const today = getLocalToday()
@@ -94,6 +99,7 @@ export function completeLesson(
     completion,
     points,
     hearts,
+    lastHeartRegenAt,
     coins,
     streak,
     lastActive: isNewDay ? today : prev.lastActive,
@@ -129,9 +135,36 @@ export function addTrainingXp(prev: ProgressState, xp: number): ProgressState {
 
 export function loseHeart(prev: ProgressState): ProgressState {
   const hearts = Math.max(0, prev.hearts - 1)
-  const next = { ...prev, hearts }
+  const lastHeartRegenAt = hearts < MAX_HEARTS && !prev.lastHeartRegenAt
+    ? new Date().toISOString()
+    : prev.lastHeartRegenAt
+  const next = { ...prev, hearts, lastHeartRegenAt }
   saveLocalProgress(next)
   return next
+}
+
+export function applyHeartRegen(prev: ProgressState): ProgressState {
+  if (prev.hearts >= MAX_HEARTS || !prev.lastHeartRegenAt) return prev
+
+  const elapsed = Date.now() - new Date(prev.lastHeartRegenAt).getTime()
+  const heartsToAdd = Math.floor(elapsed / 3_600_000)
+  if (heartsToAdd === 0) return prev
+
+  const hearts = Math.min(MAX_HEARTS, prev.hearts + heartsToAdd)
+  const lastHeartRegenAt = hearts >= MAX_HEARTS
+    ? null
+    : new Date(new Date(prev.lastHeartRegenAt).getTime() + heartsToAdd * 3_600_000).toISOString()
+
+  const next = { ...prev, hearts, lastHeartRegenAt }
+  saveLocalProgress(next)
+  return next
+}
+
+// Returns seconds until the next heart regenerates, or null if hearts are full
+export function secondsUntilNextHeart(prev: ProgressState): number | null {
+  if (prev.hearts >= MAX_HEARTS || !prev.lastHeartRegenAt) return null
+  const elapsed = Date.now() - new Date(prev.lastHeartRegenAt).getTime()
+  return Math.max(0, 3600 - Math.floor((elapsed % 3_600_000) / 1000))
 }
 
 export function calculateLevel(points: number): number {
@@ -173,6 +206,7 @@ export async function loadCloudProgress(userId: string): Promise<ProgressState |
       lastActive: data.last_active ?? null,
       completedLessons: (data as Record<string, unknown>).completed_lessons as string[] ?? [],
       claimedMissions: (data as Record<string, unknown>).claimed_missions as string[] ?? [],
+      lastHeartRegenAt: (data as Record<string, unknown>).last_heart_regen_at as string ?? null,
     }
   } catch {
     return null
@@ -193,6 +227,7 @@ export async function saveCloudProgress(userId: string, p: ProgressState) {
       last_active: p.lastActive,
       completed_lessons: p.completedLessons,
       claimed_missions: p.claimedMissions,
+      last_heart_regen_at: p.lastHeartRegenAt,
       updated_at: new Date().toISOString(),
     })
   } catch {
@@ -205,12 +240,23 @@ export async function syncProgress(userId: string, local: ProgressState): Promis
   if (!cloud) return local
 
   // merge: take highest values
+  const mergedHearts = Math.max(local.hearts, cloud.hearts)
+  // For lastHeartRegenAt: take earliest non-null timestamp (more regen credit for the user)
+  const localT = local.lastHeartRegenAt
+  const cloudT = cloud.lastHeartRegenAt
+  const mergedLastHeartRegenAt = mergedHearts >= MAX_HEARTS
+    ? null
+    : localT && cloudT
+      ? (localT < cloudT ? localT : cloudT)
+      : localT ?? cloudT
+
   const merged: ProgressState = {
     completion: Math.max(local.completion, cloud.completion),
     points: Math.max(local.points, cloud.points),
     streak: Math.max(local.streak, cloud.streak),
     badges: Array.from(new Set([...local.badges, ...cloud.badges])),
-    hearts: Math.max(local.hearts, cloud.hearts),
+    hearts: mergedHearts,
+    lastHeartRegenAt: mergedLastHeartRegenAt,
     coins: Math.max(local.coins, cloud.coins),
     lastActive: local.lastActive && cloud.lastActive
       ? (local.lastActive > cloud.lastActive ? local.lastActive : cloud.lastActive)

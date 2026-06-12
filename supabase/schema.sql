@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS user_progress (
   last_active DATE,
   completed_lessons TEXT[] DEFAULT '{}',
   claimed_missions TEXT[] DEFAULT '{}',
+  last_heart_regen_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id)

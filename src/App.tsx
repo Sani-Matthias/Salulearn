@@ -11,7 +11,11 @@ import {
   syncProgress,
   completeLesson,
   addTrainingXp,
+  applyHeartRegen,
+  secondsUntilNextHeart,
+  MAX_HEARTS,
 } from './services/progressService'
+import { addLeagueXp } from './services/leagueService'
 import HomePage from './pages/HomePage'
 import LessonPage from './pages/LessonPage'
 import TrainingPage from './pages/TrainingPage'
@@ -32,6 +36,7 @@ function AppContent() {
   const [progress, setProgress] = useState<ProgressState>(getDefaultProgress())
   const [showAuth, setShowAuth] = useState(false)
   const [synced, setSynced] = useState(false)
+  const [heartCountdown, setHeartCountdown] = useState<number | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -48,11 +53,26 @@ function AppContent() {
     const local = loadLocalProgress()
     if (local) {
       const { streak, isNewDay } = calculateStreak(local.lastActive, local.streak)
-      const updated = { ...local, streak, lastActive: isNewDay ? getLocalToday() : local.lastActive }
+      const withStreak = { ...local, streak, lastActive: isNewDay ? getLocalToday() : local.lastActive }
+      const updated = applyHeartRegen(withStreak)
       setProgress(updated)
       if (isNewDay) saveLocalProgress(updated)
     }
   }, [])
+
+  // Heart regeneration tick: +1 heart per hour, updates countdown display every second
+  useEffect(() => {
+    const id = setInterval(() => {
+      setProgress(prev => applyHeartRegen(prev))
+      setHeartCountdown(secs => (secs !== null && secs > 0 ? secs - 1 : secs))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Recalculate countdown whenever hearts or regen timestamp changes
+  useEffect(() => {
+    setHeartCountdown(secondsUntilNextHeart(progress))
+  }, [progress.hearts, progress.lastHeartRegenAt])
 
   // Sync with cloud on login
   useEffect(() => {
@@ -78,7 +98,10 @@ function AppContent() {
   const handleCompleteLesson = (lessonId: string, xpReward: number, heartsLost: number) => {
     setProgress(prev => {
       const next = completeLesson(prev, lessonId, xpReward, heartsLost)
-      if (user && isOnlineMode) saveCloudProgress(user.id, next)
+      if (user && isOnlineMode) {
+        saveCloudProgress(user.id, next)
+        addLeagueXp(user.id, xpReward)
+      }
       return next
     })
   }
@@ -86,7 +109,10 @@ function AppContent() {
   const handleTrainingXp = (xp: number) => {
     setProgress(prev => {
       const next = addTrainingXp(prev, xp)
-      if (user && isOnlineMode) saveCloudProgress(user.id, next)
+      if (user && isOnlineMode) {
+        saveCloudProgress(user.id, next)
+        addLeagueXp(user.id, xp)
+      }
       return next
     })
   }
@@ -121,9 +147,17 @@ function AppContent() {
             <span className={`stat-icon${progress.streak > 0 ? ' fire' : ''}`}>🔥</span>
             <span>{progress.streak}</span>
           </div>
-          <div className="stat-pill hearts">
+          <div
+            className="stat-pill hearts"
+            title={heartCountdown !== null ? `Nächstes Herz in ${Math.floor(heartCountdown / 60)}:${String(heartCountdown % 60).padStart(2, '0')}` : undefined}
+          >
             <span className="stat-icon">❤️</span>
-            <span>{progress.hearts}</span>
+            <span>{progress.hearts}{progress.hearts < MAX_HEARTS ? `/${MAX_HEARTS}` : ''}</span>
+            {heartCountdown !== null && (
+              <span className="heart-regen-timer">
+                {Math.floor(heartCountdown / 60)}:{String(heartCountdown % 60).padStart(2, '0')}
+              </span>
+            )}
           </div>
           <div className="stat-pill xp">
             <span className="stat-icon">⭐</span>

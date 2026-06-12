@@ -171,6 +171,14 @@ button { font-family: inherit; }
 .stat-icon { font-size: 18px; line-height: 1; display: inline-block; }
 .stat-icon.fire { animation: fire 0.7s ease-in-out infinite; }
 
+.heart-regen-timer {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.75;
+  letter-spacing: 0.5px;
+  margin-left: 2px;
+}
+
 .top-bar-spacer { flex: 1; }
 
 .top-bar-login {
@@ -1098,8 +1106,97 @@ button { font-family: inherit; }
   overflow: hidden;
 }
 .lb-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.lb-name { flex: 1; font-size: 16px; font-weight: 800; color: var(--text); }
+.lb-name { flex: 1; font-size: 16px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 6px; }
 .lb-xp { font-size: 15px; font-weight: 900; color: var(--info); }
+
+/* Liga zone tinting */
+.lb-item.lb-zone-promotion { border-left: 3px solid #28a745; }
+.lb-item.lb-zone-relegation { border-left: 3px solid #dc3545; opacity: 0.85; }
+.lb-item.lb-zone-stay { border-left: 3px solid transparent; }
+
+.lb-me-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--success);
+  color: white;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+/* Zone divider */
+.lb-zone-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 10px 0 4px;
+  opacity: 0.75;
+}
+.lb-zone-divider span:first-child,
+.lb-zone-divider span:last-child { font-size: 14px; }
+.lb-zone-divider span:nth-child(2) { flex: 1; text-align: center; }
+
+/* Zone legend pills */
+.lb-zone-legend {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.lb-zone-legend-item {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.lb-zone-legend-item.promotion { background: #d4edda; color: #155724; }
+.lb-zone-legend-item.stay      { background: #e9ecef; color: #495057; }
+.lb-zone-legend-item.relegation{ background: #f8d7da; color: #721c24; }
+
+/* Liga tier dot ladder */
+.lb-tier-ladder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+}
+.lb-tier-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+/* Loading skeleton */
+.lb-skeleton {
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(90deg, var(--surface) 25%, var(--border) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Offline notice */
+.lb-offline-notice {
+  margin: 20px 0;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
 
 /* ========== AUTH MODAL ========== */
 .modal-overlay {
