@@ -24,6 +24,10 @@ export type Profile = {
   avatar_url: string | null
   created_at: string
   updated_at: string
+  is_pro?: boolean
+  pro_expires_at?: string | null
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
 }
 
 export type UserProgress = {

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { totalLessons } from '../data/lessons'
+import type { ShopItem } from '../data/shopCatalog'
 
 export type ProgressState = {
   completion: number        // 0–1
@@ -12,6 +13,9 @@ export type ProgressState = {
   completedLessons: string[]
   claimedMissions: string[]
   lastHeartRegenAt: string | null // ISO timestamp when regen cycle started; null when hearts are full
+  inventory: string[]              // owned shop item IDs
+  equippedFrame: string | null     // equipped avatar frame item ID
+  equippedTheme: string | null     // equipped app theme item ID
 }
 
 export const MAX_HEARTS = 5
@@ -35,6 +39,9 @@ export function getDefaultProgress(): ProgressState {
     completedLessons: [],
     claimedMissions: [],
     lastHeartRegenAt: null,
+    inventory: [],
+    equippedFrame: null,
+    equippedTheme: null,
   }
 }
 
@@ -77,18 +84,20 @@ export function completeLesson(
   prev: ProgressState,
   lessonId: string,
   xpReward: number,
-  heartsLost: number = 0
+  heartsLost: number = 0,
+  isPro: boolean = false
 ): ProgressState {
   if (prev.completedLessons.includes(lessonId)) return prev
 
   const completedLessons = [...prev.completedLessons, lessonId]
   const completion = completedLessons.length / totalLessons
-  const points = prev.points + xpReward
-  const hearts = Math.max(0, Math.min(MAX_HEARTS, prev.hearts - heartsLost))
+  const gainedXp = isPro ? Math.floor(xpReward * 1.5) : xpReward
+  const points = prev.points + gainedXp
+  const hearts = isPro ? prev.hearts : Math.max(0, Math.min(MAX_HEARTS, prev.hearts - heartsLost))
   const lastHeartRegenAt = hearts < MAX_HEARTS && !prev.lastHeartRegenAt
     ? new Date().toISOString()
     : prev.lastHeartRegenAt
-  const coins = prev.coins + Math.floor(xpReward / 5)
+  const coins = prev.coins + Math.floor(gainedXp / 5)
 
   const today = getLocalToday()
   const { streak, isNewDay } = calculateStreak(prev.lastActive, prev.streak)
@@ -124,11 +133,42 @@ function checkBadges(p: ProgressState): string[] {
   return Array.from(badges)
 }
 
-export function addTrainingXp(prev: ProgressState, xp: number): ProgressState {
+export function addTrainingXp(prev: ProgressState, xp: number, isPro: boolean = false): ProgressState {
   if (xp <= 0) return prev
-  const points = prev.points + xp
-  const coins = prev.coins + Math.floor(xp / 5)
+  const gainedXp = isPro ? Math.floor(xp * 1.5) : xp
+  const points = prev.points + gainedXp
+  const coins = prev.coins + Math.floor(gainedXp / 5)
   const next = { ...prev, points, coins, badges: checkBadges({ ...prev, points }) }
+  saveLocalProgress(next)
+  return next
+}
+
+// ── Shop ────────────────────────────────────────────────────
+
+export function purchaseItem(prev: ProgressState, item: ShopItem): ProgressState {
+  if (prev.inventory.includes(item.id)) return prev
+  if (item.proOnly || prev.coins < item.price) return prev
+
+  const next: ProgressState = {
+    ...prev,
+    coins: prev.coins - item.price,
+    inventory: [...prev.inventory, item.id],
+  }
+  saveLocalProgress(next)
+  return next
+}
+
+export function equipItem(
+  prev: ProgressState,
+  type: 'frame' | 'theme',
+  itemId: string | null,
+  owned: boolean
+): ProgressState {
+  if (itemId && !owned) return prev
+
+  const next: ProgressState = type === 'frame'
+    ? { ...prev, equippedFrame: itemId }
+    : { ...prev, equippedTheme: itemId }
   saveLocalProgress(next)
   return next
 }
@@ -207,6 +247,9 @@ export async function loadCloudProgress(userId: string): Promise<ProgressState |
       completedLessons: (data as Record<string, unknown>).completed_lessons as string[] ?? [],
       claimedMissions: (data as Record<string, unknown>).claimed_missions as string[] ?? [],
       lastHeartRegenAt: (data as Record<string, unknown>).last_heart_regen_at as string ?? null,
+      inventory: (data as Record<string, unknown>).inventory as string[] ?? [],
+      equippedFrame: (data as Record<string, unknown>).equipped_frame as string ?? null,
+      equippedTheme: (data as Record<string, unknown>).equipped_theme as string ?? null,
     }
   } catch {
     return null
@@ -228,6 +271,9 @@ export async function saveCloudProgress(userId: string, p: ProgressState) {
       completed_lessons: p.completedLessons,
       claimed_missions: p.claimedMissions,
       last_heart_regen_at: p.lastHeartRegenAt,
+      inventory: p.inventory,
+      equipped_frame: p.equippedFrame,
+      equipped_theme: p.equippedTheme,
       updated_at: new Date().toISOString(),
     })
   } catch {
@@ -263,6 +309,9 @@ export async function syncProgress(userId: string, local: ProgressState): Promis
       : local.lastActive ?? cloud.lastActive,
     completedLessons: Array.from(new Set([...local.completedLessons, ...cloud.completedLessons])),
     claimedMissions: Array.from(new Set([...local.claimedMissions, ...cloud.claimedMissions])),
+    inventory: Array.from(new Set([...local.inventory, ...cloud.inventory])),
+    equippedFrame: local.equippedFrame ?? cloud.equippedFrame,
+    equippedTheme: local.equippedTheme ?? cloud.equippedTheme,
   }
   merged.completion = merged.completedLessons.length / totalLessons
 

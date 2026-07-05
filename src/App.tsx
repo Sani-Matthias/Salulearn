@@ -13,14 +13,19 @@ import {
   addTrainingXp,
   applyHeartRegen,
   secondsUntilNextHeart,
+  purchaseItem,
+  equipItem,
   MAX_HEARTS,
 } from './services/progressService'
 import { addLeagueXp } from './services/leagueService'
+import type { ShopItem } from './data/shopCatalog'
+import AvatarFrame from './components/AvatarFrame'
 import HomePage from './pages/HomePage'
 import LessonPage from './pages/LessonPage'
 import TrainingPage from './pages/TrainingPage'
 import ProfilePage from './pages/ProfilePage'
 import LeaderboardPage from './pages/LeaderboardPage'
+import ShopPage from './pages/ShopPage'
 import BlogPage from './pages/BlogPage'
 import AuthModal from './components/AuthModal'
 
@@ -29,7 +34,7 @@ const getLocalToday = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-type Tab = 'home' | 'training' | 'leaderboard' | 'profile'
+type Tab = 'home' | 'training' | 'leaderboard' | 'shop' | 'profile'
 
 function AppContent() {
   const { user, profile, isOnlineMode } = useAuth()
@@ -45,8 +50,11 @@ function AppContent() {
   const activeTab: Tab =
     location.pathname.startsWith('/leaderboard') ? 'leaderboard' :
     location.pathname.startsWith('/training')    ? 'training'    :
+    location.pathname.startsWith('/shop')        ? 'shop'        :
     location.pathname.startsWith('/profile')     ? 'profile'     :
     'home'
+
+  const isPro = !!profile?.is_pro && (!profile.pro_expires_at || new Date(profile.pro_expires_at) > new Date())
 
   // Load local progress on mount
   useEffect(() => {
@@ -95,9 +103,14 @@ function AppContent() {
     if (!user) setSynced(false)
   }, [user])
 
+  // Apply equipped theme as a data attribute so CSS can override accent colors
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', progress.equippedTheme ?? '')
+  }, [progress.equippedTheme])
+
   const handleCompleteLesson = (lessonId: string, xpReward: number, heartsLost: number) => {
     setProgress(prev => {
-      const next = completeLesson(prev, lessonId, xpReward, heartsLost)
+      const next = completeLesson(prev, lessonId, xpReward, heartsLost, isPro)
       if (user && isOnlineMode) {
         saveCloudProgress(user.id, next)
         addLeagueXp(user.id, xpReward)
@@ -108,7 +121,7 @@ function AppContent() {
 
   const handleTrainingXp = (xp: number) => {
     setProgress(prev => {
-      const next = addTrainingXp(prev, xp)
+      const next = addTrainingXp(prev, xp, isPro)
       if (user && isOnlineMode) {
         saveCloudProgress(user.id, next)
         addLeagueXp(user.id, xp)
@@ -117,10 +130,28 @@ function AppContent() {
     })
   }
 
+  const handlePurchase = (item: ShopItem) => {
+    setProgress(prev => {
+      const next = purchaseItem(prev, item)
+      if (user && isOnlineMode) saveCloudProgress(user.id, next)
+      return next
+    })
+  }
+
+  const handleEquip = (type: 'frame' | 'theme', itemId: string | null) => {
+    setProgress(prev => {
+      const owned = itemId ? prev.inventory.includes(itemId) || (itemId === 'frame_pro' && isPro) : true
+      const next = equipItem(prev, type, itemId, owned)
+      if (user && isOnlineMode) saveCloudProgress(user.id, next)
+      return next
+    })
+  }
+
   const navTo = (tab: Tab) => {
     if (tab === 'home') navigate('/')
     else if (tab === 'training') navigate('/training')
     else if (tab === 'leaderboard') navigate('/leaderboard')
+    else if (tab === 'shop') navigate('/shop')
     else navigate('/profile')
   }
 
@@ -149,14 +180,20 @@ function AppContent() {
           </div>
           <div
             className="stat-pill hearts"
-            title={heartCountdown !== null ? `Nächstes Herz in ${Math.floor(heartCountdown / 60)}:${String(heartCountdown % 60).padStart(2, '0')}` : undefined}
+            title={!isPro && heartCountdown !== null ? `Nächstes Herz in ${Math.floor(heartCountdown / 60)}:${String(heartCountdown % 60).padStart(2, '0')}` : undefined}
           >
             <span className="stat-icon">❤️</span>
-            <span>{progress.hearts}{progress.hearts < MAX_HEARTS ? `/${MAX_HEARTS}` : ''}</span>
-            {heartCountdown !== null && (
-              <span className="heart-regen-timer">
-                {Math.floor(heartCountdown / 60)}:{String(heartCountdown % 60).padStart(2, '0')}
-              </span>
+            {isPro ? (
+              <span>∞</span>
+            ) : (
+              <>
+                <span>{progress.hearts}{progress.hearts < MAX_HEARTS ? `/${MAX_HEARTS}` : ''}</span>
+                {heartCountdown !== null && (
+                  <span className="heart-regen-timer">
+                    {Math.floor(heartCountdown / 60)}:{String(heartCountdown % 60).padStart(2, '0')}
+                  </span>
+                )}
+              </>
             )}
           </div>
           <div className="stat-pill xp">
@@ -172,13 +209,17 @@ function AppContent() {
 
           {user ? (
             <button
-              className="top-bar-avatar"
+              className="top-bar-avatar-wrap"
               onClick={() => navigate('/profile')}
               aria-label="Profil"
             >
-              {avatarUrl
-                ? <img src={avatarUrl} alt={displayName || ''} />
-                : avatarLetter}
+              <AvatarFrame frameId={progress.equippedFrame} size="sm">
+                <div className="top-bar-avatar">
+                  {avatarUrl
+                    ? <img src={avatarUrl} alt={displayName || ''} />
+                    : avatarLetter}
+                </div>
+              </AvatarFrame>
             </button>
           ) : (
             <button className="top-bar-login" onClick={() => setShowAuth(true)}>
@@ -194,7 +235,8 @@ function AppContent() {
         <Route path="/lesson/:lessonId" element={<LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} />} />
         <Route path="/training" element={<TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} />} />
         <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
-        <Route path="/profile" element={<ProfilePage progress={progress} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
+        <Route path="/shop" element={<ShopPage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onPurchase={handlePurchase} onEquip={handleEquip} />} />
+        <Route path="/profile" element={<ProfilePage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
         <Route path="/blog" element={<BlogPage />} />
       </Routes>
 
@@ -212,6 +254,10 @@ function AppContent() {
           <button className={`nav-btn${activeTab === 'leaderboard' ? ' active' : ''}`} onClick={() => navTo('leaderboard')}>
             <span className="nav-icon">🏆</span>
             <span className="nav-label">Rangliste</span>
+          </button>
+          <button className={`nav-btn${activeTab === 'shop' ? ' active' : ''}`} onClick={() => navTo('shop')}>
+            <span className="nav-icon">🛒</span>
+            <span className="nav-label">Shop</span>
           </button>
           <button className={`nav-btn${activeTab === 'profile' ? ' active' : ''}`} onClick={() => navTo('profile')}>
             <span className="nav-icon">👤</span>

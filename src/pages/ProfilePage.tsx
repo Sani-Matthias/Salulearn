@@ -1,18 +1,22 @@
 import { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { ACHIEVEMENTS } from '../lib/supabase'
 import type { ProgressState } from '../services/progressService'
 import { calculateLevel, getLeague, MAX_HEARTS } from '../services/progressService'
 import { supabase } from '../lib/supabase'
+import AvatarFrame from '../components/AvatarFrame'
 
 type Props = {
   progress: ProgressState
+  isPro: boolean
   onShowAuth: () => void
   onLogout: () => void
 }
 
-export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
+export default function ProfilePage({ progress, isPro, onShowAuth, onLogout }: Props) {
   const { user, profile, signOut, updateProfile, isOnlineMode } = useAuth()
+  const navigate = useNavigate()
   const [editingName, setEditingName] = useState(false)
   const [newName, setNewName] = useState(profile?.display_name || '')
   const [saving, setSaving] = useState(false)
@@ -33,6 +37,11 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
   const completedCount = progress.completedLessons.length
 
   const earnedBadges = new Set(progress.badges)
+
+  const startEditingName = () => {
+    setNewName(profile?.display_name || '')
+    setEditingName(true)
+  }
 
   const handleSaveName = async () => {
     if (!newName.trim()) return
@@ -111,11 +120,13 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
       {/* Hero */}
       <div className="profile-hero">
         <div className="profile-avatar-wrap">
-          <div className="profile-avatar-circle">
-            {avatarUrl
-              ? <img src={avatarUrl} alt={displayName} />
-              : avatarLetter}
-          </div>
+          <AvatarFrame frameId={progress.equippedFrame} size="lg">
+            <div className="profile-avatar-circle">
+              {avatarUrl
+                ? <img src={avatarUrl} alt={displayName} />
+                : avatarLetter}
+            </div>
+          </AvatarFrame>
           {user && isOnlineMode && (
             <>
               <button
@@ -144,7 +155,7 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
         ) : (
           <div
             className="profile-username"
-            onClick={() => user && setEditingName(true)}
+            onClick={() => user && startEditingName()}
             style={{ cursor: user ? 'pointer' : 'default' }}
           >
             {displayName} {user && <span style={{ fontSize: 16 }}>✏️</span>}
@@ -153,9 +164,17 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
 
         {user && <div className="profile-useremail">{user.email}</div>}
 
-        <div className="profile-league-badge">
-          <span>{league.emoji}</span>
-          <span>{league.name}-Liga</span>
+        <div className="profile-badges-row">
+          <div className="profile-league-badge">
+            <span>{league.emoji}</span>
+            <span>{league.name}-Liga</span>
+          </div>
+          {isPro && (
+            <div className="pro-badge">
+              <span>⭐</span>
+              <span>Pro</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -234,9 +253,14 @@ export default function ProfilePage({ progress, onShowAuth, onLogout }: Props) {
             </button>
           ) : (
             <>
-              <button className="menu-item" onClick={() => setEditingName(true)}>
+              <button className="menu-item" onClick={startEditingName}>
                 <span className="menu-icon">✏️</span>
                 <span className="menu-text">Name ändern</span>
+                <span className="menu-arrow">›</span>
+              </button>
+              <button className="menu-item" onClick={() => navigate('/shop')}>
+                <span className="menu-icon">⭐</span>
+                <span className="menu-text">{isPro ? 'Pro verwalten' : 'SaluLearn Pro'}</span>
                 <span className="menu-arrow">›</span>
               </button>
               <button className="menu-item danger" onClick={handleLogout}>

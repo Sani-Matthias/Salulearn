@@ -27,7 +27,21 @@
       "Bash(curl -s -w '\\\\nHTTP:%{http_code}' 'https://rhfukvwijcgsrmbprppa.supabase.co/auth/v1/token?grant_type=refresh_token' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoZnVrdndpamNnc3JtYnBycHBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MjY1NTUsImV4cCI6MjA5MDAwMjU1NX0.wUDL6eO1m6vgQrnPlzO-s8yNVE4Ie0RZYdjVMp-tsTM' -H 'Content-Type: application/json' -d '{\"refresh_token\":\"invalid\"}')",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://rhfukvwijcgsrmbprppa.supabase.co/rest/v1/\" --max-time 10)",
       "Bash(xargs ls -lh)",
-      "Bash(git -C /workspaces/Salulearn status)"
+      "Bash(git -C /workspaces/Salulearn status)",
+      "Bash(git -C /workspaces/Salulearn log --oneline -20)",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"console.log\\(require\\('stripe/package.json'\\).version\\)\")",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(npm ls *)",
+      "Bash(command -v chromium chromium-browser google-chrome)",
+      "Bash(timeout 60 npx -y playwright@1.61.1 --version)",
+      "Bash(timeout 120 npx -y playwright@1.61.1 install --with-deps chromium)",
+      "Bash(pkill -f \"vite.*5183\")",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(node --env-file=.env /tmp/claude-1000/-workspaces-Salulearn/5251ccdd-40ce-4b87-8f2b-744e635cef10/scratchpad/verify-stripe-supabase.mjs)",
+      "Bash(node --env-file=.env .tmp-verify.mjs)"
     ]
   }
 }
