@@ -46,13 +46,18 @@ export default function ProfilePage({ progress, isPro, onShowAuth, onLogout }: P
   const handleSaveName = async () => {
     if (!newName.trim()) return
     setSaving(true)
-    const { error } = await updateProfile({ display_name: newName.trim() })
-    setSaving(false)
-    if (error) {
-      showToast(`Fehler: ${error}`, false)
-    } else {
-      setEditingName(false)
-      showToast('Name erfolgreich geändert!', true)
+    try {
+      const { error } = await updateProfile({ display_name: newName.trim() })
+      if (error) {
+        showToast(`Fehler: ${error}`, false)
+      } else {
+        setEditingName(false)
+        showToast('Name erfolgreich geändert!', true)
+      }
+    } catch (err) {
+      showToast(`Fehler: ${err instanceof Error ? err.message : 'Netzwerkfehler'}`, false)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -70,29 +75,33 @@ export default function ProfilePage({ progress, isPro, onShowAuth, onLogout }: P
     }
 
     setUploading(true)
-    const ext = file.name.split('.').pop() ?? 'jpg'
-    const path = `${user.id}/avatar.${ext}`
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const path = `${user.id}/avatar.${ext}`
 
-    const { error: uploadErr } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true })
+      const { error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true })
 
-    if (uploadErr) {
+      if (uploadErr) {
+        showToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false)
+        return
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const { error: profileErr } = await updateProfile({
+        avatar_url: data.publicUrl + '?t=' + Date.now(),
+      })
+
+      if (profileErr) {
+        showToast(`Profilbild konnte nicht gespeichert werden: ${profileErr}`, false)
+      } else {
+        showToast('Profilbild erfolgreich aktualisiert!', true)
+      }
+    } catch (err) {
+      showToast(`Upload fehlgeschlagen: ${err instanceof Error ? err.message : 'Netzwerkfehler'}`, false)
+    } finally {
       setUploading(false)
-      showToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false)
-      return
-    }
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-    const { error: profileErr } = await updateProfile({
-      avatar_url: data.publicUrl + '?t=' + Date.now(),
-    })
-
-    setUploading(false)
-    if (profileErr) {
-      showToast(`Profilbild konnte nicht gespeichert werden: ${profileErr}`, false)
-    } else {
-      showToast('Profilbild erfolgreich aktualisiert!', true)
     }
   }
 

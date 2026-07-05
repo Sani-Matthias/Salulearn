@@ -209,20 +209,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Nicht angemeldet.' }
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', user.id)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
 
-    if (error) {
-      return { error: translateError(error.message) }
+      if (error) {
+        return { error: translateError(error.message) }
+      }
+
+      // Refresh profile
+      const updatedProfile = await fetchProfile(user.id)
+      setProfile(updatedProfile)
+
+      return { error: null }
+    } catch (err) {
+      console.error('updateProfile failed:', err)
+      return { error: err instanceof Error ? err.message : 'Netzwerkfehler beim Speichern.' }
     }
-
-    // Refresh profile
-    const updatedProfile = await fetchProfile(user.id)
-    setProfile(updatedProfile)
-
-    return { error: null }
   }
 
   // Update password
