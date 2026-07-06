@@ -1,42 +1,32 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
-export const config = {
-  api: { bodyParser: false },
-}
-
-function readRawBody(req: VercelRequest): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    req.on('data', chunk => chunks.push(chunk))
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
-  })
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'method_not_allowed' })
-    return
+// Uses the Web API (Request/Response) function signature instead of the
+// classic Node (req, res) one: Vercel's Node handler auto-parses the body
+// before the handler runs, which corrupts the exact raw bytes Stripe signed
+// and makes constructEvent() always fail. Request.text() gives the raw body.
+export default async function handler(request: Request): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'method_not_allowed' }), { status: 405 })
   }
 
   const { STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env
   if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    res.status(503).json({ error: 'stripe_not_configured' })
-    return
+    return new Response(JSON.stringify({ error: 'stripe_not_configured' }), { status: 503 })
   }
 
   const stripe = new Stripe(STRIPE_SECRET_KEY)
-  const rawBody = await readRawBody(req)
-  const signature = req.headers['stripe-signature']
+  const rawBody = await request.text()
+  const signature = request.headers.get('stripe-signature')
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature as string, STRIPE_WEBHOOK_SECRET)
+    event = stripe.webhooks.constructEvent(rawBody, signature ?? '', STRIPE_WEBHOOK_SECRET)
   } catch (err) {
-    res.status(400).json({ error: `invalid_signature: ${err instanceof Error ? err.message : 'unknown'}` })
-    return
+    return new Response(
+      JSON.stringify({ error: `invalid_signature: ${err instanceof Error ? err.message : 'unknown'}` }),
+      { status: 400 }
+    )
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -105,5 +95,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       break
   }
 
-  res.status(200).json({ received: true })
+  return new Response(JSON.stringify({ received: true }), { status: 200 })
 }
