@@ -19,6 +19,7 @@ import {
 } from './services/progressService'
 import { addLeagueXp } from './services/leagueService'
 import type { ShopItem } from './data/shopCatalog'
+import AvatarFrame from './components/AvatarFrame'
 import HomePage from './pages/HomePage'
 import LessonPage from './pages/LessonPage'
 import TrainingPage from './pages/TrainingPage'
@@ -154,6 +155,10 @@ function AppContent() {
     else navigate('/profile')
   }
 
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || null
+  const avatarUrl = profile?.avatar_url || null
+  const avatarLetter = (displayName || 'U')[0].toUpperCase()
+
   return (
     <div className="app-root">
       {/* Top bar – hidden during lessons */}
@@ -187,6 +192,23 @@ function AppContent() {
             <span className="stat-icon">🪙</span>
             <span>{progress.coins}</span>
           </div>
+
+          <div className="top-bar-spacer" />
+
+          {user ? (
+            <button className="top-bar-account" onClick={() => navigate('/profile')} aria-label="Profil">
+              <AvatarFrame frameId={progress.equippedFrame} size="sm">
+                <div className="top-bar-avatar">
+                  {avatarUrl ? <img src={avatarUrl} alt={displayName || ''} /> : avatarLetter}
+                </div>
+              </AvatarFrame>
+              {displayName && <span className="top-bar-account-name">{displayName}</span>}
+            </button>
+          ) : (
+            <button className="top-bar-login" onClick={() => setShowAuth(true)}>
+              Einloggen
+            </button>
+          )}
         </div>
       )}
 

@@ -120,11 +120,11 @@ button { font-family: inherit; }
   top: 0;
   z-index: 50;
   background: #FFFFFF;
-  border-bottom: 2px solid var(--border);
-  padding: 10px 16px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  padding: 12px 16px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .logo-mark {
@@ -162,6 +162,63 @@ button { font-family: inherit; }
   margin-left: 2px;
 }
 
+.top-bar-spacer { flex: 1; }
+
+.top-bar-login {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--info);
+  background: #E5F7FE;
+  border: none;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: 20px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.top-bar-login:hover { background: #D2F1FD; }
+
+.top-bar-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: none;
+  border-radius: 24px;
+  padding: 4px 12px 4px 4px;
+  cursor: pointer;
+  max-width: 140px;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.top-bar-account:hover { background: var(--surface-dark); }
+.top-bar-account:active { transform: scale(0.96); }
+
+.top-bar-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), #FF9090);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: white;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.top-bar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.top-bar-account-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ========== BOTTOM NAV ========== */
 .bottom-nav {
