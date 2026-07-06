@@ -41,7 +41,11 @@
       "Bash(pkill -f \"vite.*5183\")",
       "Bash(pkill -f \"npm run dev\")",
       "Bash(node --env-file=.env /tmp/claude-1000/-workspaces-Salulearn/5251ccdd-40ce-4b87-8f2b-744e635cef10/scratchpad/verify-stripe-supabase.mjs)",
-      "Bash(node --env-file=.env .tmp-verify.mjs)"
+      "Bash(node --env-file=.env .tmp-verify.mjs)",
+      "Bash(grep -i \"^\\\\.env$\")",
+      "Bash(git status *)",
+      "Bash(node --env-file=.env .tmp-check-hearts.mjs)",
+      "Bash(node --env-file=.env .tmp-check-all-cols.mjs)"
     ]
   }
 }
