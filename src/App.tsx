@@ -19,7 +19,6 @@ import {
 } from './services/progressService'
 import { addLeagueXp } from './services/leagueService'
 import type { ShopItem } from './data/shopCatalog'
-import AvatarFrame from './components/AvatarFrame'
 import HomePage from './pages/HomePage'
 import LessonPage from './pages/LessonPage'
 import TrainingPage from './pages/TrainingPage'
@@ -155,23 +154,11 @@ function AppContent() {
     else navigate('/profile')
   }
 
-  const displayName = profile?.display_name || user?.email?.split('@')[0] || null
-  const avatarUrl = profile?.avatar_url || null
-  const avatarLetter = (displayName || 'U')[0].toUpperCase()
-
   return (
     <div className="app-root">
       {/* Top bar – hidden during lessons */}
       {!isLessonPage && (
         <div className="top-bar">
-          <button
-            className="blog-icon-btn"
-            onClick={() => navigate('/blog')}
-            aria-label="Blog"
-            title="Salulearn Blog"
-          >
-            📰
-          </button>
           <img src="/logo.png" alt="SaluLearn" className="logo-mark" />
 
           <div className="stat-pill streak">
@@ -196,36 +183,10 @@ function AppContent() {
               </>
             )}
           </div>
-          <div className="stat-pill xp">
-            <span className="stat-icon">⭐</span>
-            <span>{progress.points}</span>
-          </div>
           <div className="stat-pill coins">
             <span className="stat-icon">🪙</span>
             <span>{progress.coins}</span>
           </div>
-
-          <div className="top-bar-spacer" />
-
-          {user ? (
-            <button
-              className="top-bar-avatar-wrap"
-              onClick={() => navigate('/profile')}
-              aria-label="Profil"
-            >
-              <AvatarFrame frameId={progress.equippedFrame} size="sm">
-                <div className="top-bar-avatar">
-                  {avatarUrl
-                    ? <img src={avatarUrl} alt={displayName || ''} />
-                    : avatarLetter}
-                </div>
-              </AvatarFrame>
-            </button>
-          ) : (
-            <button className="top-bar-login" onClick={() => setShowAuth(true)}>
-              Einloggen
-            </button>
-          )}
         </div>
       )}
 

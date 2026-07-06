@@ -251,6 +251,15 @@ export default function ProfilePage({ progress, isPro, onShowAuth, onLogout }: P
           })}
         </div>
 
+        <button className="blog-cta-btn" onClick={() => navigate('/blog')}>
+          <span className="blog-cta-icon">📰</span>
+          <span className="blog-cta-text">
+            <span className="blog-cta-title">SaluLearn Blog</span>
+            <span className="blog-cta-desc">Artikel &amp; Neuigkeiten entdecken</span>
+          </span>
+          <span className="menu-arrow">›</span>
+        </button>
+
         {/* Menu */}
         <div className="section-hdr">Einstellungen</div>
         <div className="menu-list">

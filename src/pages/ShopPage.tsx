@@ -13,11 +13,8 @@ type Props = {
   onEquip: (type: 'frame' | 'theme', itemId: string | null) => void
 }
 
-type Section = 'pro' | 'skins'
-
 export default function ShopPage({ progress, isPro, onShowAuth, onPurchase, onEquip }: Props) {
   const { user } = useAuth()
-  const [section, setSection] = useState<Section>('pro')
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
@@ -110,55 +107,34 @@ export default function ShopPage({ progress, isPro, onShowAuth, onPurchase, onEq
       </div>
 
       <div className="shop-content">
-        <div className="shop-segment">
-          <button className={`shop-segment-btn${section === 'pro' ? ' active' : ''}`} onClick={() => setSection('pro')}>
-            ⭐ Pro
+        {isPro ? (
+          <div className="shop-pro-banner active">
+            <span className="shop-pro-banner-icon">⭐</span>
+            <span className="shop-pro-banner-text">Du bist Pro-Mitglied</span>
+          </div>
+        ) : isStripeConfigured() ? (
+          <button className="shop-pro-banner" onClick={handleUpgradePro} disabled={checkoutLoading}>
+            <span className="shop-pro-banner-icon">⭐</span>
+            <span className="shop-pro-banner-text">
+              <span className="shop-pro-banner-title">{checkoutLoading ? 'Wird geladen…' : 'SaluLearn Pro werden'}</span>
+              <span className="shop-pro-banner-sub">Unbegrenzte Herzen, +50% XP &amp; mehr</span>
+            </span>
+            <span className="menu-arrow">›</span>
           </button>
-          <button className={`shop-segment-btn${section === 'skins' ? ' active' : ''}`} onClick={() => setSection('skins')}>
-            🎨 Skins
-          </button>
-        </div>
-
-        {section === 'pro' && (
-          <div className="pro-section">
-            {isPro ? (
-              <div className="pro-active-card">
-                <div className="pro-active-emoji">⭐</div>
-                <div className="pro-active-title">Du bist Pro-Mitglied!</div>
-                <div className="pro-active-desc">Genieße alle Vorteile deines Abos.</div>
-              </div>
-            ) : (
-              <div className="pro-card">
-                <div className="pro-card-emoji">⭐</div>
-                <div className="pro-card-title">SaluLearn Pro</div>
-                <ul className="pro-benefits">
-                  <li>❤️ Unbegrenzte Herzen</li>
-                  <li>⚡ +50% XP &amp; Münzen auf jede Lektion</li>
-                  <li>🖼️ Exklusiver Pro-Rahmen &amp; Abzeichen</li>
-                </ul>
-                {isStripeConfigured() ? (
-                  <button className="pro-upgrade-btn" onClick={handleUpgradePro} disabled={checkoutLoading}>
-                    {checkoutLoading ? 'Wird geladen…' : 'Pro werden'}
-                  </button>
-                ) : (
-                  <>
-                    <button className="pro-upgrade-btn" disabled>Pro werden</button>
-                    <div className="pro-unavailable-note">Pro-Käufe sind bald verfügbar.</div>
-                  </>
-                )}
-              </div>
-            )}
+        ) : (
+          <div className="shop-pro-banner disabled">
+            <span className="shop-pro-banner-icon">⭐</span>
+            <span className="shop-pro-banner-text">
+              <span className="shop-pro-banner-title">SaluLearn Pro</span>
+              <span className="shop-pro-banner-sub">Bald verfügbar</span>
+            </span>
           </div>
         )}
 
-        {section === 'skins' && (
-          <>
-            <div className="section-hdr">Avatar-Rahmen</div>
-            <div className="shop-grid">{getItemsByType('frame').map(renderCard)}</div>
-            <div className="section-hdr">App-Themes</div>
-            <div className="shop-grid">{getItemsByType('theme').map(renderCard)}</div>
-          </>
-        )}
+        <div className="section-hdr">Avatar-Rahmen</div>
+        <div className="shop-grid">{getItemsByType('frame').map(renderCard)}</div>
+        <div className="section-hdr">App-Themes</div>
+        <div className="shop-grid">{getItemsByType('theme').map(renderCard)}</div>
       </div>
     </div>
   )

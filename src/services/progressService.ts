@@ -251,7 +251,8 @@ export async function loadCloudProgress(userId: string): Promise<ProgressState |
       equippedFrame: (data as Record<string, unknown>).equipped_frame as string ?? null,
       equippedTheme: (data as Record<string, unknown>).equipped_theme as string ?? null,
     }
-  } catch {
+  } catch (err) {
+    console.error('loadCloudProgress failed:', err)
     return null
   }
 }
@@ -259,7 +260,7 @@ export async function loadCloudProgress(userId: string): Promise<ProgressState |
 export async function saveCloudProgress(userId: string, p: ProgressState) {
   if (!supabase) return
   try {
-    await supabase.from('user_progress').upsert({
+    const { error } = await supabase.from('user_progress').upsert({
       user_id: userId,
       completion: p.completion,
       points: p.points,
@@ -275,9 +276,11 @@ export async function saveCloudProgress(userId: string, p: ProgressState) {
       equipped_frame: p.equippedFrame,
       equipped_theme: p.equippedTheme,
       updated_at: new Date().toISOString(),
-    })
-  } catch {
-    // ignore cloud errors
+    }, { onConflict: 'user_id' })
+
+    if (error) console.error('saveCloudProgress failed:', error)
+  } catch (err) {
+    console.error('saveCloudProgress failed:', err)
   }
 }
 
