@@ -45,7 +45,8 @@
       "Bash(grep -i \"^\\\\.env$\")",
       "Bash(git status *)",
       "Bash(node --env-file=.env .tmp-check-hearts.mjs)",
-      "Bash(node --env-file=.env .tmp-check-all-cols.mjs)"
+      "Bash(node --env-file=.env .tmp-check-all-cols.mjs)",
+      "Bash(node --env-file=.env .tmp-check-pro.mjs)"
     ]
   }
 }
