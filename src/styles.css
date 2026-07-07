@@ -547,6 +547,7 @@ button { font-family: inherit; }
   font-weight: 600;
   color: var(--text);
   line-height: 1.65;
+  white-space: pre-line;
 }
 .text-slide-content.info-box {
   background: #E5F7FE;
