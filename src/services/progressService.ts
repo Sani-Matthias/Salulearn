@@ -49,7 +49,9 @@ export function loadLocalProgress(): ProgressState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as ProgressState
+    // Merge over defaults so progress saved before a field (e.g. inventory)
+    // existed doesn't crash code that assumes it's always present.
+    return { ...getDefaultProgress(), ...JSON.parse(raw) } as ProgressState
   } catch {
     return null
   }
