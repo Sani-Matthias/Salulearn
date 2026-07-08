@@ -16,6 +16,9 @@ export const supabase = supabaseUrl && supabaseAnonKey
 
 export const isSupabaseConfigured = () => !!supabase
 
+export type ExperienceLevel = 'none' | 'normal' | 'pro'
+export type LearningPath = 'standard' | 'personalized'
+
 // Database types
 export type Profile = {
   id: string
@@ -28,6 +31,9 @@ export type Profile = {
   pro_expires_at?: string | null
   stripe_customer_id?: string | null
   stripe_subscription_id?: string | null
+  experience_level?: ExperienceLevel
+  learning_path?: LearningPath
+  onboarding_completed?: boolean
 }
 
 export type UserProgress = {

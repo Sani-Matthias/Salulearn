@@ -28,6 +28,7 @@ import LeaderboardPage from './pages/LeaderboardPage'
 import ShopPage from './pages/ShopPage'
 import BlogPage from './pages/BlogPage'
 import AuthModal from './components/AuthModal'
+import OnboardingModal from './components/OnboardingModal'
 
 const getLocalToday = () => {
   const d = new Date()
@@ -37,9 +38,10 @@ const getLocalToday = () => {
 type Tab = 'home' | 'training' | 'leaderboard' | 'shop' | 'profile'
 
 function AppContent() {
-  const { user, profile, isOnlineMode } = useAuth()
+  const { user, profile, isOnlineMode, loading: authLoading } = useAuth()
   const [progress, setProgress] = useState<ProgressState>(getDefaultProgress())
   const [showAuth, setShowAuth] = useState(false)
+  const [onboarding, setOnboarding] = useState<'register' | 'complete' | null>(null)
   const [synced, setSynced] = useState(false)
   const [heartCountdown, setHeartCountdown] = useState<number | null>(null)
   const location = useLocation()
@@ -108,6 +110,30 @@ function AppContent() {
     document.documentElement.setAttribute('data-theme', progress.equippedTheme ?? '')
   }, [progress.equippedTheme])
 
+  // Force the short onboarding flow for logged-in users with an incomplete
+  // profile (e.g. signed up via Google, which skips the full onboarding wizard)
+  useEffect(() => {
+    if (user && profile && !profile.onboarding_completed) {
+      setOnboarding('complete')
+    }
+  }, [user, profile])
+
+  // Lessons and training require an account — bounce unauthenticated direct
+  // navigation (deep links, back button) back home and open the account flow
+  useEffect(() => {
+    if (authLoading) return
+    const needsAuth = location.pathname.startsWith('/lesson/') || location.pathname.startsWith('/training')
+    if (needsAuth && !user) {
+      navigate('/', { replace: true })
+      setOnboarding('register')
+    }
+  }, [location.pathname, user, authLoading, navigate])
+
+  const requireAuth = (fn: () => void) => {
+    if (!user) { setOnboarding('register'); return }
+    fn()
+  }
+
   const handleCompleteLesson = (lessonId: string, xpReward: number, heartsLost: number) => {
     setProgress(prev => {
       const next = completeLesson(prev, lessonId, xpReward, heartsLost, isPro)
@@ -149,7 +175,7 @@ function AppContent() {
 
   const navTo = (tab: Tab) => {
     if (tab === 'home') navigate('/')
-    else if (tab === 'training') navigate('/training')
+    else if (tab === 'training') requireAuth(() => navigate('/training'))
     else if (tab === 'leaderboard') navigate('/leaderboard')
     else if (tab === 'shop') navigate('/shop')
     else navigate('/profile')
@@ -214,9 +240,9 @@ function AppContent() {
 
       {/* Page content */}
       <Routes>
-        <Route path="/" element={<HomePage progress={progress} onStartLesson={id => navigate(`/lesson/${id}`)} />} />
-        <Route path="/lesson/:lessonId" element={<LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} />} />
-        <Route path="/training" element={<TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} />} />
+        <Route path="/" element={<HomePage progress={progress} onStartLesson={id => requireAuth(() => navigate(`/lesson/${id}`))} />} />
+        <Route path="/lesson/:lessonId" element={user ? <LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} /> : null} />
+        <Route path="/training" element={user ? <TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} /> : null} />
         <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
         <Route path="/shop" element={<ShopPage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onPurchase={handlePurchase} onEquip={handleEquip} />} />
         <Route path="/profile" element={<ProfilePage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
@@ -249,7 +275,19 @@ function AppContent() {
         </nav>
       )}
 
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showAuth && (
+        <AuthModal
+          onClose={() => setShowAuth(false)}
+          onRegister={() => { setShowAuth(false); setOnboarding('register') }}
+        />
+      )}
+      {onboarding && (
+        <OnboardingModal
+          mode={onboarding}
+          onClose={onboarding === 'register' ? () => setOnboarding(null) : undefined}
+          onDone={() => setOnboarding(null)}
+        />
+      )}
     </div>
   )
 }

@@ -1323,6 +1323,51 @@ button { font-family: inherit; }
 }
 .google-btn:hover { background: var(--surface); }
 .google-btn:active { background: var(--surface-dark); }
+.onboarding-dots { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+.onboarding-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.2s, transform 0.2s; }
+.onboarding-dot.active { background: var(--info); transform: scale(1.3); }
+.onboarding-dot.done { background: var(--success); }
+
+.choice-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+
+.path-choice-row { display: flex; gap: 12px; margin-bottom: 8px; }
+.path-choice-btn {
+  flex: 1;
+  padding: 20px 14px;
+  border-radius: 16px;
+  border: 3px solid var(--border);
+  background: var(--white);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 0 var(--border);
+  font-family: inherit;
+  color: var(--text);
+}
+.path-choice-btn:hover:not(:disabled) { border-color: #AAAAAA; box-shadow: 0 4px 0 #AAAAAA; transform: translateY(-1px); }
+.path-choice-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+.path-choice-btn.disabled, .path-choice-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+  background: var(--surface);
+  box-shadow: none;
+}
+.path-choice-badge {
+  margin-top: 2px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: var(--surface-dark);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .divider {
   display: flex;
   align-items: center;

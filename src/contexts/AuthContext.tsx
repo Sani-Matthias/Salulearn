@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import { supabase, isSupabaseConfigured, type Profile } from '../lib/supabase'
+import { supabase, isSupabaseConfigured, type Profile, type ExperienceLevel, type LearningPath } from '../lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 
 type AuthContextType = {
@@ -8,7 +8,13 @@ type AuthContextType = {
   session: Session | null
   loading: boolean
   isOnlineMode: boolean
-  signUp: (email: string, password: string, displayName: string) => Promise<{ error: string | null }>
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string,
+    experienceLevel: ExperienceLevel,
+    learningPath: LearningPath,
+  ) => Promise<{ error: string | null }>
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<void>
@@ -50,11 +56,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const createProfile = useCallback(async (user: User, displayName?: string) => {
     if (!supabase) return null
 
+    // experience_level / learning_path are only present in user_metadata when the
+    // account was created through the full onboarding wizard (email/password signup).
+    // OAuth signups (e.g. Google) skip that wizard, so onboarding_completed stays
+    // false and the app prompts a shorter completion flow after first login.
+    const metaExperience = user.user_metadata?.experience_level as ExperienceLevel | undefined
+    const metaPath = user.user_metadata?.learning_path as LearningPath | undefined
+
     const newProfile = {
       id: user.id,
       email: user.email || '',
       display_name: displayName || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
       avatar_url: user.user_metadata?.avatar_url || null,
+      experience_level: metaExperience || 'none',
+      learning_path: metaPath || 'standard',
+      onboarding_completed: !!(metaExperience && metaPath),
     }
 
     const { data, error } = await supabase
@@ -101,7 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile, createProfile])
 
   // Sign up with email and password
-  const signUp = async (email: string, password: string, displayName: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    displayName: string,
+    experienceLevel: ExperienceLevel,
+    learningPath: LearningPath,
+  ) => {
     if (!supabase) {
       return { error: 'Supabase nicht konfiguriert. Bitte .env Datei pruefen.' }
     }
@@ -112,6 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         data: {
           full_name: displayName,
+          experience_level: experienceLevel,
+          learning_path: learningPath,
         },
       },
     })
@@ -162,10 +186,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign out
   const signOut = async () => {
     if (!supabase) return
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-    setSession(null)
+    try {
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error('signOut failed:', err)
+    } finally {
+      // Always clear local state, even if the server-side revoke call failed —
+      // the user clicked logout and expects the UI to reflect that regardless.
+      setUser(null)
+      setProfile(null)
+      setSession(null)
+    }
   }
 
   // Reset password

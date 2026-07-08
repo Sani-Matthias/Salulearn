@@ -46,7 +46,22 @@
       "Bash(git status *)",
       "Bash(node --env-file=.env .tmp-check-hearts.mjs)",
       "Bash(node --env-file=.env .tmp-check-all-cols.mjs)",
-      "Bash(node --env-file=.env .tmp-check-pro.mjs)"
+      "Bash(node --env-file=.env .tmp-check-pro.mjs)",
+      "Bash(find / -maxdepth 4 -iname \"*chromium-cli*\")",
+      "Bash(find / -maxdepth 6 -iname \"*playwright*\" -path \"*bin*\")",
+      "Bash(command -v chromium-cli)",
+      "Read(//home/codespace/.claude/**)",
+      "Bash(find / -maxdepth 3 -iname \"*chromium*\")",
+      "Bash(npx --yes playwright --version)",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(npx --yes playwright install chromium --with-deps)",
+      "Bash(npx --yes playwright install chromium)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(node test.mjs)",
+      "Bash(sudo -n true)",
+      "Bash(sudo apt-get install -y --no-install-recommends libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 libcairo2 libnss3 libnspr4)",
+      "Bash(pkill -f \"vite\")"
     ]
   }
 }

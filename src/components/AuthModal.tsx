@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
-type Mode = 'login' | 'register' | 'reset'
+type Mode = 'login' | 'reset'
 
-export default function AuthModal({ onClose }: { onClose: () => void }) {
-  const { signIn, signUp, resetPassword, signInWithGoogle } = useAuth()
+export default function AuthModal({ onClose, onRegister }: { onClose: () => void; onRegister: () => void }) {
+  const { signIn, resetPassword, signInWithGoogle } = useAuth()
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -23,11 +22,6 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
       const { error } = await signIn(email, password)
       if (error) setError(error)
       else onClose()
-    } else if (mode === 'register') {
-      if (!name.trim()) { setError('Bitte gib deinen Namen ein.'); setLoading(false); return }
-      const { error } = await signUp(email, password, name)
-      if (error) setError(error)
-      else setSuccess('Bestätigungs-E-Mail gesendet! Bitte prüfe dein Postfach.')
     } else {
       const { error } = await resetPassword(email)
       if (error) setError(error)
@@ -42,22 +36,16 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
         <div className="modal-handle" />
 
         <div className="modal-title">
-          {mode === 'login' ? 'Willkommen zurück! 👋' : mode === 'register' ? 'Konto erstellen 🎉' : 'Passwort zurücksetzen 🔑'}
+          {mode === 'login' ? 'Willkommen zurück! 👋' : 'Passwort zurücksetzen 🔑'}
         </div>
         <div className="modal-subtitle">
-          {mode === 'login' ? 'Melde dich an und lerne weiter' : mode === 'register' ? 'Starte deine Erste-Hilfe-Reise' : 'Wir schicken dir einen Reset-Link'}
+          {mode === 'login' ? 'Melde dich an und lerne weiter' : 'Wir schicken dir einen Reset-Link'}
         </div>
 
         {error && <div className="form-alert error">⚠️ {error}</div>}
         {success && <div className="form-alert success">✅ {success}</div>}
 
         <form onSubmit={handleSubmit}>
-          {mode === 'register' && (
-            <div className="form-field">
-              <label className="form-label">Name</label>
-              <input className="form-input" type="text" placeholder="Dein Name" value={name} onChange={e => setName(e.target.value)} required />
-            </div>
-          )}
           <div className="form-field">
             <label className="form-label">E-Mail</label>
             <input className="form-input" type="email" placeholder="deine@email.de" value={email} onChange={e => setEmail(e.target.value)} required />
@@ -71,7 +59,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
 
           <div className="modal-actions">
             <button type="submit" className="main-btn red" disabled={loading}>
-              {loading ? '...' : mode === 'login' ? 'Einloggen' : mode === 'register' ? 'Konto erstellen' : 'Link senden'}
+              {loading ? '...' : mode === 'login' ? 'Einloggen' : 'Link senden'}
             </button>
             {mode === 'login' && (
               <>
@@ -90,7 +78,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="modal-switch">
               Noch kein Konto?{' '}
-              <button className="modal-switch-btn" onClick={() => { setMode('register'); reset() }}>Registrieren</button>
+              <button className="modal-switch-btn" onClick={onRegister}>Registrieren</button>
             </div>
             <div className="modal-switch" style={{ marginTop: 6 }}>
               <button className="modal-switch-btn" onClick={() => { setMode('reset'); reset() }}>Passwort vergessen?</button>
