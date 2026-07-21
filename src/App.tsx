@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import type { ProgressState } from './services/progressService'
 import {
@@ -296,6 +297,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppContent />
+      <Analytics />
     </AuthProvider>
   )
 }
