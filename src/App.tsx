@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import type { ProgressState } from './services/progressService'
 import {
@@ -314,6 +315,7 @@ export default function App() {
     <AuthProvider>
       <AppContent />
       <Analytics />
+      <SpeedInsights />
     </AuthProvider>
   )
 }
