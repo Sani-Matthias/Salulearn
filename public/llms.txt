@@ -1,0 +1,21 @@
+# SaluLearn
+
+> SaluLearn ist eine gamifizierte Erste-Hilfe-Lern-App aus Österreich – das "Duolingo für Lebensretter". Nutzer:innen lernen in kurzen, interaktiven Lektionen lebensrettende Fähigkeiten wie Notruf absetzen, Herzdruckmassage, Wundversorgung und den richtigen Umgang mit Notfällen nach österreichischem Rotes-Kreuz-Standard.
+
+## Über SaluLearn
+
+- Spielerisches Lernformat mit XP, Herzen, Streaks und Liga-System, ähnlich bekannten Sprachlern-Apps
+- Lektionsinhalte orientieren sich an offiziellen österreichischen Erste-Hilfe-Richtlinien
+- Kostenlose Basisversion, optionales Pro-Abo für zusätzliche Vorteile
+
+## Wichtige Seiten
+
+- [Startseite](/): Lernpfad mit allen Erste-Hilfe-Modulen und Lektionen
+- [Rangliste](/leaderboard): Liga- und Ranglistensystem der Community
+- [Shop](/shop): Avatar-Rahmen, App-Themes und SaluLearn Pro
+- [Blog](/blog): Artikel rund um Erste Hilfe und Notfallwissen
+
+## Hinweise für Crawler und KI-Agenten
+
+- Lektionen (/lesson/) und Training (/training) erfordern ein kostenloses Benutzerkonto und sind daher für anonyme Crawler nicht zugänglich
+- API-Routen unter /api/ sind technische Backend-Endpunkte, keine Inhaltsseiten (siehe /robots.txt)
