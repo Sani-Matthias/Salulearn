@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import type { ProgressState } from './services/progressService'
 import {
@@ -22,6 +23,7 @@ import type { ShopItem } from './data/shopCatalog'
 import AvatarFrame from './components/AvatarFrame'
 import AuthModal from './components/AuthModal'
 import OnboardingModal from './components/OnboardingModal'
+import CategorySwitcher from './components/CategorySwitcher'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 const LessonPage = lazy(() => import('./pages/LessonPage'))
@@ -30,6 +32,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
 const ShopPage = lazy(() => import('./pages/ShopPage'))
 const BlogPage = lazy(() => import('./pages/BlogPage'))
+const ComingSoonPage = lazy(() => import('./pages/ComingSoonPage'))
 
 const getLocalToday = () => {
   const d = new Date()
@@ -199,6 +202,8 @@ function AppContent() {
         <div className="top-bar">
           <img src="/logo.png" alt="SaluLearn" className="logo-mark" width={36} height={36} fetchPriority="high" />
 
+          {activeTab === 'home' && <CategorySwitcher />}
+
           <div className="stat-pill streak">
             <span className={`stat-icon${progress.streak > 0 ? ' fire' : ''}`}>🔥</span>
             <span>{progress.streak}</span>
@@ -249,6 +254,9 @@ function AppContent() {
       <Suspense fallback={pageFallback}>
         <Routes>
           <Route path="/" element={<HomePage progress={progress} onStartLesson={id => requireAuth(() => navigate(`/lesson/${id}`))} />} />
+          <Route path="/notfall" element={<ComingSoonPage category="notfall" />} />
+          <Route path="/szenarios" element={<ComingSoonPage category="szenarios" />} />
+          <Route path="/spezielles" element={<ComingSoonPage category="spezielles" />} />
           <Route path="/lesson/:lessonId" element={user ? <LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} /> : null} />
           <Route path="/training" element={user ? <TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} /> : null} />
           <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
@@ -305,6 +313,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppContent />
+      <Analytics />
     </AuthProvider>
   )
 }
