@@ -23,7 +23,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|sw\\.js$|registerSW\\.js$|workbox-[^/]+\\.js$|manifest\\.json$|robots\\.txt$|\\.well-known/).*)",
+      "source": "/((?!api/|sw\\.js$|registerSW\\.js$|workbox-[^/]+\\.js$|manifest\\.json$|robots\\.txt$|llms\\.txt$|\\.well-known/).*)",
       "destination": "/"
     }
   ]
