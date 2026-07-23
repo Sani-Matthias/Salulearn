@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import type { ProgressState } from './services/progressService'
@@ -20,15 +20,16 @@ import {
 import { addLeagueXp } from './services/leagueService'
 import type { ShopItem } from './data/shopCatalog'
 import AvatarFrame from './components/AvatarFrame'
-import HomePage from './pages/HomePage'
-import LessonPage from './pages/LessonPage'
-import TrainingPage from './pages/TrainingPage'
-import ProfilePage from './pages/ProfilePage'
-import LeaderboardPage from './pages/LeaderboardPage'
-import ShopPage from './pages/ShopPage'
-import BlogPage from './pages/BlogPage'
 import AuthModal from './components/AuthModal'
 import OnboardingModal from './components/OnboardingModal'
+
+const HomePage = lazy(() => import('./pages/HomePage'))
+const LessonPage = lazy(() => import('./pages/LessonPage'))
+const TrainingPage = lazy(() => import('./pages/TrainingPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
+const ShopPage = lazy(() => import('./pages/ShopPage'))
+const BlogPage = lazy(() => import('./pages/BlogPage'))
 
 const getLocalToday = () => {
   const d = new Date()
@@ -185,12 +186,18 @@ function AppContent() {
   const avatarUrl = profile?.avatar_url || null
   const avatarLetter = (displayName || 'U')[0].toUpperCase()
 
+  const pageFallback = (
+    <div style={{ minHeight: 220, display: 'grid', placeItems: 'center', color: '#777', fontWeight: 700 }}>
+      Lädt…
+    </div>
+  )
+
   return (
     <div className="app-root">
       {/* Top bar – hidden during lessons */}
       {!isLessonPage && (
         <div className="top-bar">
-          <img src="/logo.png" alt="SaluLearn" className="logo-mark" />
+          <img src="/logo.png" alt="SaluLearn" className="logo-mark" width={36} height={36} fetchPriority="high" />
 
           <div className="stat-pill streak">
             <span className={`stat-icon${progress.streak > 0 ? ' fire' : ''}`}>🔥</span>
@@ -225,7 +232,7 @@ function AppContent() {
             <button className="top-bar-account" onClick={() => navigate('/profile')} aria-label="Profil">
               <AvatarFrame frameId={progress.equippedFrame} size="sm">
                 <div className="top-bar-avatar">
-                  {avatarUrl ? <img src={avatarUrl} alt={displayName || ''} /> : avatarLetter}
+                  {avatarUrl ? <img src={avatarUrl} alt={displayName || ''} width={30} height={30} /> : avatarLetter}
                 </div>
               </AvatarFrame>
               {displayName && <span className="top-bar-account-name">{displayName}</span>}
@@ -239,15 +246,17 @@ function AppContent() {
       )}
 
       {/* Page content */}
-      <Routes>
-        <Route path="/" element={<HomePage progress={progress} onStartLesson={id => requireAuth(() => navigate(`/lesson/${id}`))} />} />
-        <Route path="/lesson/:lessonId" element={user ? <LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} /> : null} />
-        <Route path="/training" element={user ? <TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} /> : null} />
-        <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
-        <Route path="/shop" element={<ShopPage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onPurchase={handlePurchase} onEquip={handleEquip} />} />
-        <Route path="/profile" element={<ProfilePage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
-        <Route path="/blog" element={<BlogPage />} />
-      </Routes>
+      <Suspense fallback={pageFallback}>
+        <Routes>
+          <Route path="/" element={<HomePage progress={progress} onStartLesson={id => requireAuth(() => navigate(`/lesson/${id}`))} />} />
+          <Route path="/lesson/:lessonId" element={user ? <LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} /> : null} />
+          <Route path="/training" element={user ? <TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} /> : null} />
+          <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
+          <Route path="/shop" element={<ShopPage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onPurchase={handlePurchase} onEquip={handleEquip} />} />
+          <Route path="/profile" element={<ProfilePage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onLogout={() => setProgress(getDefaultProgress())} />} />
+          <Route path="/blog" element={<BlogPage />} />
+        </Routes>
+      </Suspense>
 
       {/* Bottom nav – hidden during lessons */}
       {!isLessonPage && (

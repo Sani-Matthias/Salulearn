@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /lesson/
+Disallow: /training
+Disallow: /profile

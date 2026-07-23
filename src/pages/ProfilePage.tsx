@@ -132,7 +132,7 @@ export default function ProfilePage({ progress, isPro, onShowAuth, onLogout }: P
           <AvatarFrame frameId={progress.equippedFrame} size="lg">
             <div className="profile-avatar-circle">
               {avatarUrl
-                ? <img src={avatarUrl} alt={displayName} />
+                ? <img src={avatarUrl} alt={displayName} width={96} height={96} loading="lazy" />
                 : avatarLetter}
             </div>
           </AvatarFrame>

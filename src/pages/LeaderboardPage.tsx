@@ -155,7 +155,7 @@ export default function LeaderboardPage({ progress }: Props) {
         </div>
         <div className="lb-avatar">
           {e.avatar_url
-            ? <img src={e.avatar_url} alt="" />
+            ? <img src={e.avatar_url} alt="" width={40} height={40} loading="lazy" />
             : avatar}
         </div>
         <div className="lb-name">

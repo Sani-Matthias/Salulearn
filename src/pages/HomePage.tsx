@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { modules } from '../data/lessons'
+import { useEffect, useState } from 'react'
+import type { Module } from '../data/lessons'
 import type { ProgressState } from '../services/progressService'
 
 type Props = {
@@ -9,9 +9,28 @@ type Props = {
 
 export default function HomePage({ progress, onStartLesson }: Props) {
   const [lockedPop, setLockedPop] = useState<string | null>(null)
+  const [modules, setModules] = useState<Module[]>([])
+
+  useEffect(() => {
+    let mounted = true
+    import('../data/lessons').then(({ modules: lessonModules }) => {
+      if (mounted) setModules(lessonModules)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const completedSet = new Set(progress.completedLessons)
   const allLessons = modules.flatMap(m => m.lessons)
+
+  if (modules.length === 0) {
+    return (
+      <div className="path-page" style={{ display: 'grid', placeItems: 'center', minHeight: 260 }}>
+        <div style={{ color: '#777', fontWeight: 700 }}>Lektionen werden geladen…</div>
+      </div>
+    )
+  }
 
   const getStatus = (lessonId: string): 'completed' | 'active' | 'locked' => {
     if (completedSet.has(lessonId)) return 'completed'

@@ -1,5 +1,4 @@
 import { supabase } from '../lib/supabase'
-import { totalLessons } from '../data/lessons'
 import type { ShopItem } from '../data/shopCatalog'
 
 export type ProgressState = {
@@ -19,6 +18,7 @@ export type ProgressState = {
 }
 
 export const MAX_HEARTS = 5
+const TOTAL_LESSONS = 30
 
 const STORAGE_KEY = 'salulearn_progress_v2'
 
@@ -92,7 +92,7 @@ export function completeLesson(
   if (prev.completedLessons.includes(lessonId)) return prev
 
   const completedLessons = [...prev.completedLessons, lessonId]
-  const completion = completedLessons.length / totalLessons
+  const completion = completedLessons.length / TOTAL_LESSONS
   const gainedXp = isPro ? Math.floor(xpReward * 1.5) : xpReward
   const points = prev.points + gainedXp
   const hearts = isPro ? prev.hearts : Math.max(0, Math.min(MAX_HEARTS, prev.hearts - heartsLost))
@@ -318,7 +318,7 @@ export async function syncProgress(userId: string, local: ProgressState): Promis
     equippedFrame: local.equippedFrame ?? cloud.equippedFrame,
     equippedTheme: local.equippedTheme ?? cloud.equippedTheme,
   }
-  merged.completion = merged.completedLessons.length / totalLessons
+  merged.completion = merged.completedLessons.length / TOTAL_LESSONS
 
   return merged
 }
