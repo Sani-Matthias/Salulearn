@@ -5,8 +5,10 @@ import { MAX_HEARTS } from '../services/progressService'
 
 type Props = {
   progress: ProgressState
+  isGuest?: boolean
   onComplete: (lessonId: string, xpReward: number, heartsLost: number) => void
   onExit: () => void
+  onRequireRegister?: () => void
 }
 
 // Confetti particle
@@ -49,7 +51,7 @@ function Confetti() {
   )
 }
 
-export default function LessonPage({ progress, onComplete, onExit }: Props) {
+export default function LessonPage({ progress, isGuest, onComplete, onExit, onRequireRegister }: Props) {
   // Extract lessonId from URL
   const lessonId = window.location.pathname.split('/lesson/')[1] ?? ''
   const lesson = getLessonById(lessonId)
@@ -143,7 +145,8 @@ export default function LessonPage({ progress, onComplete, onExit }: Props) {
   const handleFinish = () => {
     if (!lesson) return
     onComplete(lesson.id, lesson.xpReward, heartsLost)
-    onExit()
+    if (isGuest && onRequireRegister) onRequireRegister()
+    else onExit()
   }
 
   if (!lesson) {
@@ -188,7 +191,7 @@ export default function LessonPage({ progress, onComplete, onExit }: Props) {
             </div>
           </div>
           <button className="main-btn green" style={{ width: '100%' }} onClick={handleFinish}>
-            Weiter →
+            {isGuest ? 'Kostenloses Konto erstellen →' : 'Weiter →'}
           </button>
         </div>
       </div>

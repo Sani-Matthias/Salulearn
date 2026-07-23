@@ -18,6 +18,7 @@ import {
   MAX_HEARTS,
 } from './services/progressService'
 import { addLeagueXp } from './services/leagueService'
+import { allLessons } from './data/lessons'
 import type { ShopItem } from './data/shopCatalog'
 import AvatarFrame from './components/AvatarFrame'
 import AuthModal from './components/AuthModal'
@@ -37,6 +38,10 @@ const getLocalToday = () => {
 }
 
 type Tab = 'home' | 'training' | 'leaderboard' | 'shop' | 'profile'
+
+// First lesson is free to try without an account — a soft gate to let
+// visitors experience the app before asking them to register
+const FREE_LESSON_ID = allLessons[0].id
 
 function AppContent() {
   const { user, profile, isOnlineMode, loading: authLoading } = useAuth()
@@ -119,11 +124,13 @@ function AppContent() {
     }
   }, [user, profile])
 
-  // Lessons and training require an account — bounce unauthenticated direct
-  // navigation (deep links, back button) back home and open the account flow
+  // Lessons and training require an account (except the free first lesson) —
+  // bounce unauthenticated direct navigation (deep links, back button) back
+  // home and open the account flow
   useEffect(() => {
     if (authLoading) return
-    const needsAuth = location.pathname.startsWith('/lesson/') || location.pathname.startsWith('/training')
+    const isFreeLesson = location.pathname === `/lesson/${FREE_LESSON_ID}`
+    const needsAuth = (location.pathname.startsWith('/lesson/') && !isFreeLesson) || location.pathname.startsWith('/training')
     if (needsAuth && !user) {
       navigate('/', { replace: true })
       setOnboarding('register')
@@ -248,8 +255,29 @@ function AppContent() {
       {/* Page content */}
       <Suspense fallback={pageFallback}>
         <Routes>
-          <Route path="/" element={<HomePage progress={progress} onStartLesson={id => requireAuth(() => navigate(`/lesson/${id}`))} />} />
-          <Route path="/lesson/:lessonId" element={user ? <LessonPage progress={progress} onComplete={handleCompleteLesson} onExit={() => navigate('/')} /> : null} />
+          <Route
+            path="/"
+            element={
+              <HomePage
+                progress={progress}
+                onStartLesson={id => id === FREE_LESSON_ID ? navigate(`/lesson/${id}`) : requireAuth(() => navigate(`/lesson/${id}`))}
+              />
+            }
+          />
+          <Route
+            path="/lesson/:lessonId"
+            element={
+              user || location.pathname === `/lesson/${FREE_LESSON_ID}` ? (
+                <LessonPage
+                  progress={progress}
+                  isGuest={!user}
+                  onComplete={handleCompleteLesson}
+                  onExit={() => navigate('/')}
+                  onRequireRegister={() => setOnboarding('register')}
+                />
+              ) : null
+            }
+          />
           <Route path="/training" element={user ? <TrainingPage progress={progress} onXpEarned={handleTrainingXp} onExit={() => navigate('/')} /> : null} />
           <Route path="/leaderboard" element={<LeaderboardPage progress={progress} />} />
           <Route path="/shop" element={<ShopPage progress={progress} isPro={isPro} onShowAuth={() => setShowAuth(true)} onPurchase={handlePurchase} onEquip={handleEquip} />} />
